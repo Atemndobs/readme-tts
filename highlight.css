@@ -1,0 +1,22 @@
+/* Highlight styles */
+.tts-highlight {
+    background-color: #ffd700 !important;
+    border-radius: 2px !important;
+    padding: 2px 0 !important;
+    animation: tts-highlight-pulse 2s infinite !important;
+    color: inherit !important;
+    text-decoration: none !important;
+    display: inline !important;
+}
+
+@keyframes tts-highlight-pulse {
+    0% {
+        background-color: #ffd700;
+    }
+    50% {
+        background-color: #ffe44d;
+    }
+    100% {
+        background-color: #ffd700;
+    }
+}

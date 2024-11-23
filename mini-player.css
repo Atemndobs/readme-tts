@@ -1,0 +1,73 @@
+.tts-mini-player {
+    position: fixed;
+    background: #2c2c2c;
+    border-radius: 8px;
+    padding: 8px 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 0.2s ease-in-out;
+    border: 1px solid #3c3c3c;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.tts-mini-player.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.tts-mini-player button {
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.tts-mini-player button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tts-mini-player .play-pause {
+    background: #4a90e2;
+    color: white;
+}
+
+.tts-mini-player .play-pause:hover {
+    background: #357abd;
+}
+
+.tts-mini-player .progress-ring {
+    width: 32px;
+    height: 32px;
+}
+
+.tts-mini-player .progress-ring circle {
+    stroke: #4a90e2;
+    stroke-width: 2;
+    fill: transparent;
+    transition: stroke-dashoffset 0.2s;
+}
+
+.tts-mini-player .time {
+    color: #ffffff;
+    font-size: 12px;
+    min-width: 50px;
+    text-align: center;
+}
+
+.tts-mini-player .close {
+    opacity: 0.7;
+}
+
+.tts-mini-player .close:hover {
+    opacity: 1;
+}

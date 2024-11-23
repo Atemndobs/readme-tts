@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Read Me - TTS</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="input-container">
+    <button title="Dark Mode" id="darkModeToggle">
+      <i class="fa-solid fa-circle-half-stroke"></i>
+    </button>
+    <button title="Open in floating window" id="openInFloatingWindow">
+      <i class="fa-solid fa-up-right-from-square"></i>
+    </button>
+    <button title="Close" id="closeButton">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <!-- <h2>Read Me - TTS</h2> -->
+
+  <div class="action-buttons">
+    <div class="url-input-group">
+      <input type="url" id="pageUrlInput" placeholder="Enter webpage URL" />
+      <button id="convertPageButton" class="action-button" title="Convert entire webpage to speech">
+        <!-- <i class="fa-solid fa-file-audio"></i> -->
+        Read
+      </button>
+    </div>
+  </div>
+
+  <!-- Dropdown for selecting model -->
+<label for="modelSelect">Language:</label>
+<select id="modelSelect">
+  <option value="voice-en-us">English (US)</option>
+  <option value="voice-en-gb">English (GB)</option>
+  <option value="voice-de">German (DE)</option>
+  <option value="voice-it">Italian</option>
+  <option value="voice-fr">French</option>
+  <option value="voice-es">Spanish (ES)</option>
+</select>
+<!-- Dropdown for selecting voice -->
+<label for="voiceSelect">Voice:</label>
+<select id="voiceSelect"></select>
+  <textarea id="textInput" placeholder="Enter text here"></textarea>
+  <button id="convertButton">Convert to Speech</button>
+  <!-- <button id="openInFloatingWindow">Open in Floating Window</button>  -->
+  <div id="message"></div>
+  
+  <!-- Custom Audio Player -->
+  <div id="audioPlayerContainer" class="audio-player-container">
+    <div class="navigation-controls">
+      <button id="prevAudio" class="nav-button" title="Previous">
+        <i class="fa-solid fa-backward"></i>
+      </button>
+      
+      <div class="circular-player">
+        <svg class="progress-ring" width="60" height="60">
+          <circle class="progress-ring-circle-bg" cx="30" cy="30" r="26"/>
+          <circle class="progress-ring-circle" cx="30" cy="30" r="26"/>
+        </svg>
+        <button id="playPauseButton" class="play-button">
+          <i class="fa-solid fa-play"></i>
+        </button>
+      </div>
+
+      <button id="nextAudio" class="nav-button" title="Next">
+        <i class="fa-solid fa-forward"></i>
+      </button>
+    </div>
+    
+    <div class="audio-info">
+      <div id="currentAudioText" class="text-preview"></div>
+      <div class="audio-progress">
+        <span id="currentTime">0:00</span>
+        <span class="separator">/</span>
+        <span id="duration">0:00</span>
+        <span class="chunk-info">
+          (Part <span id="currentChunk">0</span>/<span id="totalChunks">0</span>)
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden container for storing audio elements -->
+  <div id="audioContainer" class="audio-container" style="display: none;"></div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

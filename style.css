@@ -1,0 +1,598 @@
+/* Basic styling for the popup */
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f4f4f9;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s;
+    min-width: 400px;
+    border-radius: 8px;
+}
+
+.dark-mode {
+    background-color: #1a1a1a;
+    color: #fff;
+}
+
+/* Input container styling */
+.input-container {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.input-container button {
+    background: transparent;
+    border: none;
+    color: #666;
+    padding: 5px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.input-container button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .input-container button {
+    color: #aaa;
+}
+
+.dark-mode .input-container button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Heading styles */
+h2 {
+    margin: 0 0 20px 0;
+    font-size: 1.5em;
+    font-weight: 500;
+}
+
+/* Form elements styling */
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* Dark mode styles for input elements */
+.dark-mode textarea,
+.dark-mode select {
+    background-color: #2d2d2d;
+    color: #fff;
+    border: 1px solid #404040;
+}
+
+.dark-mode textarea::placeholder {
+    color: #aaa;
+}
+
+.dark-mode select option {
+    background-color: #2d2d2d;
+    color: #fff;
+}
+
+/* Input elements default styling */
+textarea, select {
+    width: calc(100% - 16px); /* Account for padding */
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+    font-size: 14px;
+}
+
+textarea {
+    height: 80px;
+    resize: vertical;
+    line-height: 1.4;
+}
+
+select {
+    cursor: pointer;
+    appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px;
+}
+
+/* URL input group styles */
+.url-input-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+#pageUrlInput {
+  flex: 1;
+  height: 16px;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+#pageUrlInput:focus {
+  outline: none;
+  border-color: #2196f3;
+}
+
+#convertPageButton {
+  height: 34px;
+  padding: 0 16px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
+  white-space: nowrap;
+}
+
+#convertPageButton:hover {
+  background-color: #1976d2;
+}
+
+#convertPageButton:active {
+  background-color: #1565c0;
+}
+
+#convertPageButton i {
+  font-size: 14px;
+}
+
+/* Dark mode styles */
+.dark-mode #pageUrlInput {
+  background-color: #333;
+  border-color: #555;
+  color: #fff;
+}
+
+.dark-mode #pageUrlInput:focus {
+  border-color: #64b5f6;
+}
+
+.dark-mode #pageUrlInput::placeholder {
+  color: #888;
+}
+
+.dark-mode #convertPageButton {
+  background-color: #64b5f6;
+}
+
+.dark-mode #convertPageButton:hover {
+  background-color: #42a5f5;
+}
+
+.dark-mode #convertPageButton:active {
+  background-color: #2196f3;
+}
+
+/* Convert button styling */
+#convertButton {
+    width: 100%;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-bottom: 15px;
+}
+
+#convertButton:hover {
+    background-color: #0056b3;
+}
+
+#convertButton:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Action buttons styling */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+  padding: 0 10px;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.action-button:hover {
+  background-color: #1976d2;
+}
+
+.action-button i {
+  font-size: 16px;
+}
+
+.dark-mode .action-button {
+  background-color: #64b5f6;
+}
+
+.dark-mode .action-button:hover {
+  background-color: #42a5f5;
+}
+
+/* Message and audio container styling */
+#message {
+    color: #dc3545;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+#audioContainer {
+    width: 100%;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+#audioContainer::-webkit-scrollbar {
+    width: 8px;
+}
+
+#audioContainer::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#audioContainer::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.dark-mode #audioContainer::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#audioContainer audio {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+/* Audio controls styling */
+audio {
+    width: calc(100% - 2px);
+    border-radius: 4px;
+}
+
+/* Audio history styling */
+.audio-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    gap: 10px;
+    transition: background-color 0.3s;
+}
+
+.dark-mode .audio-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.text-preview {
+    flex: 1;
+    font-size: 13px;
+    color: #444;
+    margin: 0 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dark-mode .text-preview {
+    color: #ddd;
+}
+
+.timestamp {
+    font-size: 12px;
+    color: #666;
+    min-width: 75px;
+}
+
+.dark-mode .timestamp {
+    color: #aaa;
+}
+
+.delete-button {
+    background: transparent;
+    border: none;
+    padding: 5px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    color: #dc3545;
+}
+
+.delete-button:hover {
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.dark-mode .delete-button {
+    color: #ff6b6b;
+}
+
+.audio-item audio {
+    flex: 2;
+    min-width: 200px;
+}
+
+/* Audio Player Styles */
+.audio-player-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  margin: 16px 0;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dark-mode .audio-player-container {
+  background-color: #2d2d2d;
+}
+
+.navigation-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+}
+
+.nav-button {
+  background: none;
+  border: none;
+  color: #2196f3;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.nav-button:hover {
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.nav-button:active {
+  transform: scale(0.95);
+}
+
+.dark-mode .nav-button {
+  color: #64b5f6;
+}
+
+.dark-mode .nav-button:hover {
+  background-color: rgba(100, 181, 246, 0.1);
+}
+
+.circular-player {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin: 0 16px;
+}
+
+.progress-ring {
+  transform: rotate(-90deg);
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.progress-ring-circle-bg {
+  fill: none;
+  stroke: #e0e0e0;
+  stroke-width: 3;
+}
+
+.progress-ring-circle {
+  fill: none;
+  stroke: #2196f3;
+  stroke-width: 3;
+  stroke-dasharray: 163.36;
+  stroke-dashoffset: 163.36;
+  transition: stroke-dashoffset 0.3s;
+}
+
+.dark-mode .progress-ring-circle-bg {
+  stroke: #424242;
+}
+
+.dark-mode .progress-ring-circle {
+  stroke: #64b5f6;
+}
+
+.play-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s;
+}
+
+.play-button i {
+  color: #2196f3;
+  font-size: 16px;
+  margin-left: 2px;
+}
+
+.play-button.playing i {
+  margin-left: 0;
+}
+
+.play-button:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+.play-button:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
+.dark-mode .play-button {
+  background: #424242;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dark-mode .play-button i {
+  color: #64b5f6;
+}
+
+.audio-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.text-preview {
+  font-size: 14px;
+  color: #666;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 16px;
+  margin-bottom: 4px;
+}
+
+.timestamp {
+  font-size: 12px;
+  color: #888;
+}
+
+.dark-mode .text-preview {
+  color: #bbb;
+}
+
+.dark-mode .timestamp {
+  color: #888;
+}
+
+.audio-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.dark-mode .audio-progress {
+  color: #bbb;
+}
+
+.audio-progress .separator {
+  color: #999;
+  margin: 0 2px;
+}
+
+.chunk-info {
+  margin-left: 8px;
+  color: #888;
+}
+
+.dark-mode .chunk-info {
+  color: #999;
+}
+
+#currentTime, #duration {
+  font-family: monospace;
+  min-width: 35px;
+  display: inline-block;
+  text-align: center;
+}
+
+/* Highlight styles */
+.tts-highlight {
+    background-color: #ffd700;
+    border-radius: 2px;
+    padding: 2px 0;
+    animation: highlight-pulse 2s infinite;
+}
+
+@keyframes highlight-pulse {
+    0% {
+        background-color: #ffd700;
+    }
+    50% {
+        background-color: #ffe44d;
+    }
+    100% {
+        background-color: #ffd700;
+    }
+}
+
+/* Hide native audio controls */
+audio {
+    display: none !important;
+}
+
+/* Hide the audio container */
+.audio-container {
+    display: none !important;
+}

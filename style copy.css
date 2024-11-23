@@ -1,0 +1,243 @@
+/* Basic styling for the popup */
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f4f4f9;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s;
+    min-width: 400px;
+    border-radius: 8px;
+}
+
+.dark-mode {
+    background-color: #1a1a1a;
+    color: #fff;
+}
+
+/* Input container styling */
+.input-container {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.input-container button {
+    background: transparent;
+    border: none;
+    color: #666;
+    padding: 5px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.input-container button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .input-container button {
+    color: #aaa;
+}
+
+.dark-mode .input-container button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Heading styles */
+h2 {
+    margin: 0 0 20px 0;
+    font-size: 1.5em;
+    font-weight: 500;
+}
+
+/* Form elements styling */
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* Dark mode styles for input elements */
+.dark-mode textarea,
+.dark-mode select {
+    background-color: #2d2d2d;
+    color: #fff;
+    border: 1px solid #404040;
+}
+
+.dark-mode textarea::placeholder {
+    color: #aaa;
+}
+
+.dark-mode select option {
+    background-color: #2d2d2d;
+    color: #fff;
+}
+
+/* Input elements default styling */
+textarea, select {
+    width: calc(100% - 16px); /* Account for padding */
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+    font-size: 14px;
+}
+
+textarea {
+    height: 120px;
+    resize: vertical;
+    line-height: 1.4;
+}
+
+select {
+    cursor: pointer;
+    appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px;
+}
+
+/* Convert button styling */
+#convertButton {
+    width: 100%;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-bottom: 15px;
+}
+
+#convertButton:hover {
+    background-color: #0056b3;
+}
+
+#convertButton:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Message and audio container styling */
+#message {
+    color: #dc3545;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+#audioContainer {
+    width: 100%;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+#audioContainer::-webkit-scrollbar {
+    width: 8px;
+}
+
+#audioContainer::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#audioContainer::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.dark-mode #audioContainer::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#audioContainer audio {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+/* Audio controls styling */
+audio {
+    width: calc(100% - 2px);
+    border-radius: 4px;
+}
+
+/* Audio history styling */
+.audio-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    gap: 10px;
+    transition: background-color 0.3s;
+}
+
+.dark-mode .audio-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.text-preview {
+    flex: 1;
+    font-size: 13px;
+    color: #444;
+    margin: 0 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dark-mode .text-preview {
+    color: #ddd;
+}
+
+.timestamp {
+    font-size: 12px;
+    color: #666;
+    min-width: 75px;
+}
+
+.dark-mode .timestamp {
+    color: #aaa;
+}
+
+.delete-button {
+    background: transparent;
+    border: none;
+    padding: 5px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    color: #dc3545;
+}
+
+.delete-button:hover {
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.dark-mode .delete-button {
+    color: #ff6b6b;
+}
+
+.audio-item audio {
+    flex: 2;
+    min-width: 200px;
+}

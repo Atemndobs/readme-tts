@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "ReadMe - Text to Speech",
+  "version": "1.3.0",
+  "description": "Convert text to speech with advanced audio management",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://voice.cloud.atemkeng.de/*",
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [{
+    "resources": [
+      "popup.html",
+      "popup.js",
+      "content.js",
+      "background.js",
+      "highlight.css",
+      "mini-player.css",
+      "icon/*"
+    ],
+    "matches": ["<all_urls>"],
+    "extension_ids": ["*"]
+  }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://voice.cloud.atemkeng.de/;"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon/icons8-voice-recognition-96.png",
+      "48": "icon/icons8-voice-recognition-48.png",
+      "128": "icon/icons8-voice-recognition-128.png"
+    }
+  },
+  "icons": {
+    "16": "icon/icons8-voice-recognition-96.png",
+    "48": "icon/icons8-voice-recognition-48.png",
+    "128": "icon/icons8-voice-recognition-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["highlight.css", "mini-player.css"],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
