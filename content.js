@@ -17,50 +17,11 @@ function isExtensionContextValid() {
   }
 }
 
-// Function to wait
-function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Function to retry an operation with exponential backoff
-async function retryOperation(operation, maxRetries = 3) {
-  let lastError;
-  let delay = 1000;
-
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      if (!isContextValid) {
-        await wait(100); // Short wait to check context again
-        if (!isExtensionContextValid()) {
-          throw new Error('Extension context invalidated');
-        }
-      }
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      console.warn(`Attempt ${i + 1}/${maxRetries} failed:`, error.message);
-      
-      if (error.message.includes('Extension context invalidated')) {
-        await wait(delay);
-        delay *= 2; // Exponential backoff
-      } else {
-        throw error;
-      }
-    }
-  }
-  throw lastError;
-}
-
 // Periodic context check
-const contextCheckInterval = setInterval(() => {
-  const wasValid = isContextValid;
+setInterval(() => {
   isContextValid = isExtensionContextValid();
-  
-  // If context becomes invalid, clean up
-  if (wasValid && !isContextValid) {
-    console.warn('Extension context became invalid, cleaning up...');
+  if (!isContextValid) {
     cleanup();
-    clearInterval(contextCheckInterval);
   }
 }, 1000);
 
@@ -328,64 +289,79 @@ function createAndPlayAudio(audioUrl) {
   }
 }
 
-// Function to handle text selection with context check
-document.addEventListener('mouseup', async (e) => {
-  if (!isContextValid) {
-    console.warn('Extension context invalid, ignoring selection');
-    cleanup();
-    return;
-  }
+// // Function to handle text selection with context check
+// document.addEventListener('mouseup', async (e) => {
+//   if (!isContextValid) {
+//     console.warn('Extension context invalid, ignoring selection');
+//     cleanup();
+//     return;
+//   }
 
-  const selection = window.getSelection();
-  if (!selection) return;
+//   const selection = window.getSelection();
+//   if (!selection) return;
   
-  const selectedText = selection.toString().trim();
+//   const selectedText = selection.toString().trim();
   
-  try {
-    if (selectedText.length > 0) {
-      await retryOperation(async () => {
-        // Clean up previous highlight
-        cleanup();
-        
-        // Create new highlight
-        const range = selection.getRangeAt(0);
-        if (!range) return;
-        
-        const span = document.createElement('span');
-        span.className = 'tts-highlight-container';
-        span.innerHTML = selectedText.replace(/(.*)/g, '<mark class="tts-highlight">$1</mark>');
-        
-        range.deleteContents();
-        range.insertNode(span);
-        currentHighlight = span;
-        
-        // Show mini player
-        const rect = range.getBoundingClientRect();
-        showMiniPlayer(
-          rect.right + window.scrollX,
-          rect.top + window.scrollY
-        );
-        
-        // Store the selected text
-        await chrome.storage.local.set({
-          selectedText,
-          autoConvert: true
-        });
-      });
-    } else {
-      // Hide mini player if click is outside
-      if (miniPlayer && !miniPlayer.contains(e.target)) {
-        hideMiniPlayer();
-      }
-    }
-  } catch (error) {
-    console.error('Text selection error:', error);
-    cleanup();
-    if (error.message.includes('Extension context invalidated')) {
-      isContextValid = false;
-    }
-  }
-});
+//   try {
+//     if (selectedText.length > 0) {
+//       // Clean up previous highlight
+//       cleanup();
+      
+//       // Create new highlight
+//       const range = selection.getRangeAt(0);
+//       if (!range) return;
+      
+//       const span = document.createElement('span');
+//       span.className = 'tts-highlight-container';
+//       span.innerHTML = selectedText.replace(/(.*)/g, '<mark class="tts-highlight">$1</mark>');
+      
+//       try {
+//         range.deleteContents();
+//         range.insertNode(span);
+//         currentHighlight = span;
+//       } catch (error) {
+//         console.error('Error creating highlight:', error);
+//         return;
+//       }
+      
+//       // Show mini player
+//       try {
+//         const rect = range.getBoundingClientRect();
+//         showMiniPlayer(
+//           rect.right + window.scrollX,
+//           rect.top + window.scrollY
+//         );
+//       } catch (error) {
+//         console.error('Error showing mini player:', error);
+//         cleanup();
+//         return;
+//       }
+      
+//       // Store the selected text
+//       try {
+//         await chrome.storage.local.set({
+//           selectedText,
+//           autoConvert: true
+//         });
+//       } catch (error) {
+//         console.warn('Error storing selection:', error);
+//         isContextValid = false;
+//         cleanup();
+//       }
+//     } else {
+//       // Hide mini player if click is outside
+//       if (miniPlayer && !miniPlayer.contains(e.target)) {
+//         hideMiniPlayer();
+//       }
+//     }
+//   } catch (error) {
+//     console.error('Text selection error:', error);
+//     cleanup();
+//     if (error.message.includes('Extension context invalidated')) {
+//       isContextValid = false;
+//     }
+//   }
+// });
 
 // Handle messages from the extension with context check
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -395,56 +371,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  (async () => {
-    try {
-      switch (request.action) {
-        case 'highlight':
-          await retryOperation(() => highlightText(request.text));
-          sendResponse({ success: true });
-          break;
-        case 'ping':
-          sendResponse({ success: true });
-          break;
-        case 'playAudio':
-          await retryOperation(async () => {
-            createAndPlayAudio(request.audioUrl);
-            if (request.text) {
-              await highlightText(request.text);
-            }
-          });
-          sendResponse({ success: true });
-          break;
-        default:
-          sendResponse({ success: false, error: 'Unknown action' });
-      }
-    } catch (error) {
-      console.error('Message handling error:', error);
-      cleanup();
-      if (isContextValid) {
-        sendResponse({ success: false, error: error.message });
-      }
-      if (error.message.includes('Extension context invalidated')) {
-        isContextValid = false;
-      }
+  try {
+    switch (request.action) {
+      case 'highlight':
+        highlightText(request.text);
+        sendResponse({ success: true });
+        break;
+      case 'ping':
+        sendResponse({ success: true });
+        break;
+      case 'playAudio':
+        createAndPlayAudio(request.audioUrl);
+        if (request.text) {
+          highlightText(request.text);
+        }
+        sendResponse({ success: true });
+        break;
+      default:
+        sendResponse({ success: false, error: 'Unknown action' });
     }
-  })();
+  } catch (error) {
+    console.error('Message handling error:', error);
+    cleanup();
+    sendResponse({ success: false, error: error.message });
+    if (error.message.includes('Extension context invalidated')) {
+      isContextValid = false;
+    }
+  }
   return true;
-});
-
-// Initial context check and setup
-if (isExtensionContextValid()) {
-  retryOperation(async () => {
-    await chrome.runtime.sendMessage({ action: 'contentScriptReady' });
-  }).catch(error => {
-    console.warn('Error during initialization:', error);
-    isContextValid = false;
-  });
-}
-
-// Handle unload
-window.addEventListener('unload', () => {
-  clearInterval(contextCheckInterval);
-  cleanup();
 });
 
 // Initialize highlight styles
@@ -491,3 +445,20 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+// Initial context check and setup
+if (isExtensionContextValid()) {
+  try {
+    chrome.runtime.sendMessage({ action: 'contentScriptReady' })
+      .catch(error => {
+        console.warn('Error sending ready message:', error);
+        isContextValid = false;
+      });
+  } catch (error) {
+    console.warn('Error during initialization:', error);
+    isContextValid = false;
+  }
+}
+
+// Handle unload
+window.addEventListener('unload', cleanup);

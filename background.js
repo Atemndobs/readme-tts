@@ -211,47 +211,9 @@ function splitIntoParagraphs(text) {
     .map(p => p.replace(/\s+/g, ' ')); // Normalize whitespace
 }
 
-// Function to create blob URL with proper cleanup
-function createBlobUrl(blob, tabId) {
-  // Ensure we're in the extension context
-  if (!chrome?.runtime?.id) {
-    throw new Error('Extension context invalidated');
-  }
-  
-  try {
-    // Create the blob URL
-    const url = URL.createObjectURL(blob);
-    
-    // Store the URL with its tab ID
-    if (!blobUrls.has(tabId)) {
-      blobUrls.set(tabId, new Set());
-    }
-    blobUrls.get(tabId).add(url);
-    
-    return url;
-  } catch (error) {
-    console.error('Error creating blob URL:', error);
-    throw error;
-  }
-}
-
-// Function to revoke blob URLs for a tab
-function revokeBlobUrlsForTab(tabId) {
-  if (blobUrls.has(tabId)) {
-    const urls = blobUrls.get(tabId);
-    for (const url of urls) {
-      try {
-        URL.revokeObjectURL(url);
-      } catch (error) {
-        console.error('Error revoking blob URL:', error);
-      }
-    }
-    blobUrls.delete(tabId);
-  }
-}
-
-// Function to convert text to speech
+// Function to convert text to speech and create blob URL
 async function convertTextToSpeech(text, tabId) {
+  // Ensure we're in extension context
   if (!chrome?.runtime?.id) {
     throw new Error('Extension context invalidated');
   }
@@ -274,11 +236,42 @@ async function convertTextToSpeech(text, tabId) {
       throw new Error(error.error?.message || 'Failed to convert text to speech');
     }
 
-    const blob = await response.blob();
-    return createBlobUrl(blob, tabId);
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'audio/mp3' });
+    
+    // Create blob URL in a try-catch block
+    try {
+      const url = window.URL.createObjectURL(blob);
+      
+      // Store the URL with its tab ID
+      if (!blobUrls.has(tabId)) {
+        blobUrls.set(tabId, new Set());
+      }
+      blobUrls.get(tabId).add(url);
+      
+      return url;
+    } catch (blobError) {
+      console.error('Error creating blob URL:', blobError);
+      throw new Error('Failed to create audio URL');
+    }
   } catch (error) {
     console.error('TTS conversion error:', error);
     throw error;
+  }
+}
+
+// Function to revoke blob URLs for a tab
+function revokeBlobUrlsForTab(tabId) {
+  if (blobUrls.has(tabId)) {
+    const urls = blobUrls.get(tabId);
+    for (const url of urls) {
+      try {
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Error revoking blob URL:', error);
+      }
+    }
+    blobUrls.delete(tabId);
   }
 }
 
@@ -296,19 +289,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === 'convertSelection' || request.action === 'textSelected') {
+  if (request.action === 'convertTextToSpeech') {
     (async () => {
       try {
         // Clean up previous blob URLs for this tab
         revokeBlobUrlsForTab(tabId);
         
+        // Convert text to speech with retry
         const audioUrl = await retryOperation(async () => {
           return await convertTextToSpeech(request.text, tabId);
         });
         
         sendResponse({ success: true, audioUrl });
       } catch (error) {
-        console.error('Error in convertSelection:', error);
+        console.error('Error in text-to-speech conversion:', error);
         sendResponse({ 
           success: false, 
           error: error.message || 'Failed to convert text to speech'
@@ -328,6 +322,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+
+// Function to create floating window
+async function createFloatingWindow(selectedText = '') {
+  try {
+    const width = 500;
+    const height = 700;
+    
+    // Get the current window to calculate the center position
+    const currentWindow = await chrome.windows.getCurrent();
+    const left = Math.round(currentWindow.left + (currentWindow.width - width) / 2);
+    const top = Math.round(currentWindow.top + (currentWindow.height - height) / 2);
+    
+    // Store the selected text before creating the window
+    await chrome.storage.local.set({ 
+      selectedText,
+      autoConvert: true
+    });
+    
+    const window = await chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html"),
+      type: "popup",
+      width: width,
+      height: height,
+      left: left,
+      top: top
+    });
+
+    floatingWindowId = window.id;
+    const tabs = await chrome.tabs.query({ windowId: window.id });
+    if (tabs.length > 0) {
+      floatingTabId = tabs[0].id;
+    }
+    return window;
+  } catch (error) {
+    console.error('Error creating floating window:', error);
+    throw error;
+  }
+}
+
 // Handle context menu clicks with proper cleanup
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'convertTextToSpeech' && tab?.id) {
@@ -335,14 +368,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       // Clean up previous blob URLs for this tab
       revokeBlobUrlsForTab(tab.id);
       
-      const audioUrl = await convertTextToSpeech(info.selectionText, tab.id);
-      
-      // Send audio URL to content script
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'playAudio',
-        audioUrl: audioUrl,
-        text: info.selectionText
-      });
+      // Open floating window with selected text
+      await createFloatingWindow(info.selectionText);
     } catch (error) {
       console.error('Error processing text to speech:', error);
       // Show error notification
@@ -350,7 +377,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         type: 'basic',
         iconUrl: 'images/icon128.png',
         title: 'Text-to-Speech Error',
-        message: error.message || 'Failed to convert text to speech'
+        message: error.message || 'Failed to process text to speech'
       });
     }
   }
@@ -375,33 +402,6 @@ chrome.windows.onRemoved.addListener((windowId) => {
     floatingTabId = null;
   }
 });
-
-// Function to create floating window
-async function createFloatingWindow() {
-  const width = 500;
-  const height = 600;
-  
-  // Get the current window to calculate the center position
-  const currentWindow = await chrome.windows.getCurrent();
-  const left = Math.round(currentWindow.left + (currentWindow.width - width) / 2);
-  const top = Math.round(currentWindow.top + (currentWindow.height - height) / 2);
-  
-  const window = await chrome.windows.create({
-    url: chrome.runtime.getURL("popup.html"),
-    type: "popup",
-    width: width,
-    height: height,
-    left: left,
-    top: top
-  });
-  
-  floatingWindowId = window.id;
-  const tabs = await chrome.tabs.query({ windowId: window.id });
-  if (tabs.length > 0) {
-    floatingTabId = tabs[0].id;
-  }
-  return window;
-}
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
