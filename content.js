@@ -2,10 +2,111 @@
 let currentHighlight = null;
 let miniPlayer = null;
 let currentAudio = null;
+let isContextValid = true;
 
-// Function to handle page interactions
+// Function to check if extension context is valid
+function isExtensionContextValid() {
+  try {
+    return typeof chrome !== 'undefined' && 
+           chrome?.runtime?.id !== undefined && 
+           chrome.runtime.getManifest() !== undefined;
+  } catch (e) {
+    isContextValid = false;
+    console.warn('Extension context check failed:', e);
+    return false;
+  }
+}
+
+// Function to wait
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Function to retry an operation with exponential backoff
+async function retryOperation(operation, maxRetries = 3) {
+  let lastError;
+  let delay = 1000;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (!isContextValid) {
+        await wait(100); // Short wait to check context again
+        if (!isExtensionContextValid()) {
+          throw new Error('Extension context invalidated');
+        }
+      }
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      console.warn(`Attempt ${i + 1}/${maxRetries} failed:`, error.message);
+      
+      if (error.message.includes('Extension context invalidated')) {
+        await wait(delay);
+        delay *= 2; // Exponential backoff
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
+
+// Periodic context check
+const contextCheckInterval = setInterval(() => {
+  const wasValid = isContextValid;
+  isContextValid = isExtensionContextValid();
+  
+  // If context becomes invalid, clean up
+  if (wasValid && !isContextValid) {
+    console.warn('Extension context became invalid, cleaning up...');
+    cleanup();
+    clearInterval(contextCheckInterval);
+  }
+}, 1000);
+
+// Cleanup function
+function cleanup() {
+  try {
+    if (currentHighlight) {
+      const parent = currentHighlight.parentNode;
+      if (parent) {
+        parent.replaceChild(currentHighlight.firstChild, currentHighlight);
+      }
+      currentHighlight = null;
+    }
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    if (miniPlayer) {
+      hideMiniPlayer();
+    }
+  } catch (error) {
+    console.error('Cleanup error:', error);
+  }
+}
+
+// Function to check if extension context is valid
+function isExtensionContextValid() {
+  return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+}
+
+// Function to handle page interactions with context check
 document.addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'pageInteraction' });
+  if (!isContextValid) return;
+  
+  try {
+    chrome.runtime.sendMessage({ action: 'pageInteraction' })
+      .catch(error => {
+        console.warn('Page interaction error:', error);
+        isContextValid = false;
+        cleanup();
+      });
+  } catch (error) {
+    console.warn('Page interaction error:', error);
+    isContextValid = false;
+    cleanup();
+  }
 });
 
 // Function to escape special characters in string for regex
@@ -173,80 +274,103 @@ function formatTime(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-// Create and play audio
+// Create and play audio with error handling
 function createAndPlayAudio(audioUrl) {
+  try {
     if (currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
+      currentAudio.pause();
+      currentAudio = null;
     }
 
     currentAudio = new Audio(audioUrl);
     
+    currentAudio.addEventListener('error', (e) => {
+      console.error('Audio playback error:', e);
+      const playPauseBtn = miniPlayer?.querySelector('.play-pause');
+      if (playPauseBtn) {
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+      }
+      updateProgressRing(0);
+    });
+    
     currentAudio.addEventListener('timeupdate', () => {
-        updateProgressRing(currentAudio.currentTime / currentAudio.duration);
-        updateTimeDisplay(currentAudio.currentTime, currentAudio.duration);
+      updateProgressRing(currentAudio.currentTime / currentAudio.duration);
+      updateTimeDisplay(currentAudio.currentTime, currentAudio.duration);
     });
     
     currentAudio.addEventListener('ended', () => {
-        const playPauseBtn = miniPlayer?.querySelector('.play-pause');
-        if (playPauseBtn) {
-            playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
-        }
-        updateProgressRing(0);
+      const playPauseBtn = miniPlayer?.querySelector('.play-pause');
+      if (playPauseBtn) {
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+      }
+      updateProgressRing(0);
     });
     
     currentAudio.addEventListener('play', () => {
-        const playPauseBtn = miniPlayer?.querySelector('.play-pause');
-        if (playPauseBtn) {
-            playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
-        }
+      const playPauseBtn = miniPlayer?.querySelector('.play-pause');
+      if (playPauseBtn) {
+        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+      }
     });
     
     currentAudio.addEventListener('pause', () => {
-        const playPauseBtn = miniPlayer?.querySelector('.play-pause');
-        if (playPauseBtn) {
-            playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
-        }
+      const playPauseBtn = miniPlayer?.querySelector('.play-pause');
+      if (playPauseBtn) {
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+      }
     });
 
-    currentAudio.play();
+    currentAudio.play().catch(error => {
+      console.error('Error playing audio:', error);
+    });
+  } catch (error) {
+    console.error('Error creating audio:', error);
+  }
 }
 
-// Function to handle text selection
+// Function to handle text selection with context check
 document.addEventListener('mouseup', async (e) => {
+  if (!isContextValid) {
+    console.warn('Extension context invalid, ignoring selection');
+    cleanup();
+    return;
+  }
+
   const selection = window.getSelection();
+  if (!selection) return;
+  
   const selectedText = selection.toString().trim();
   
   try {
     if (selectedText.length > 0) {
-      // Clean up previous highlight
-      if (currentHighlight) {
-        const parent = currentHighlight.parentNode;
-        if (parent) {
-          parent.replaceChild(currentHighlight.firstChild, currentHighlight);
-        }
-        currentHighlight = null;
-      }
-      
-      // Create new highlight
-      const range = selection.getRangeAt(0);
-      const span = document.createElement('span');
-      span.innerHTML = selectedText.replace(/(.*)/g, '<mark class="tts-highlight">$1</mark>');
-      range.deleteContents();
-      range.insertNode(span);
-      currentHighlight = span;
-      
-      // Show mini player
-      const rect = range.getBoundingClientRect();
-      showMiniPlayer(
-        rect.right + window.scrollX,
-        rect.top + window.scrollY
-      );
-      
-      // Store the selected text
-      chrome.storage.local.set({
-        selectedText,
-        autoConvert: true
+      await retryOperation(async () => {
+        // Clean up previous highlight
+        cleanup();
+        
+        // Create new highlight
+        const range = selection.getRangeAt(0);
+        if (!range) return;
+        
+        const span = document.createElement('span');
+        span.className = 'tts-highlight-container';
+        span.innerHTML = selectedText.replace(/(.*)/g, '<mark class="tts-highlight">$1</mark>');
+        
+        range.deleteContents();
+        range.insertNode(span);
+        currentHighlight = span;
+        
+        // Show mini player
+        const rect = range.getBoundingClientRect();
+        showMiniPlayer(
+          rect.right + window.scrollX,
+          rect.top + window.scrollY
+        );
+        
+        // Store the selected text
+        await chrome.storage.local.set({
+          selectedText,
+          autoConvert: true
+        });
       });
     } else {
       // Hide mini player if click is outside
@@ -255,43 +379,86 @@ document.addEventListener('mouseup', async (e) => {
       }
     }
   } catch (error) {
-    console.error('Error handling text selection:', error);
-    // Clean up on error
-    if (currentHighlight) {
-      const parent = currentHighlight.parentNode;
-      if (parent) {
-        parent.replaceChild(currentHighlight.firstChild, currentHighlight);
-      }
-      currentHighlight = null;
+    console.error('Text selection error:', error);
+    cleanup();
+    if (error.message.includes('Extension context invalidated')) {
+      isContextValid = false;
     }
-    hideMiniPlayer();
   }
 });
 
-// Handle messages from the extension
+// Handle messages from the extension with context check
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'highlight') {
-        highlightText(request.text);
-        sendResponse({ success: true });
-    } else if (request.action === 'ping') {
-        sendResponse({ success: true });
-    } else if (request.action === 'playAudio') {
-        createAndPlayAudio(request.audioUrl);
-        if (request.text) {
-            highlightText(request.text);
-        }
-        sendResponse({ success: true });
-    }
+  if (!isContextValid) {
+    console.warn('Extension context invalid, ignoring message');
+    sendResponse({ success: false, error: 'Extension context invalidated' });
     return true;
+  }
+
+  (async () => {
+    try {
+      switch (request.action) {
+        case 'highlight':
+          await retryOperation(() => highlightText(request.text));
+          sendResponse({ success: true });
+          break;
+        case 'ping':
+          sendResponse({ success: true });
+          break;
+        case 'playAudio':
+          await retryOperation(async () => {
+            createAndPlayAudio(request.audioUrl);
+            if (request.text) {
+              await highlightText(request.text);
+            }
+          });
+          sendResponse({ success: true });
+          break;
+        default:
+          sendResponse({ success: false, error: 'Unknown action' });
+      }
+    } catch (error) {
+      console.error('Message handling error:', error);
+      cleanup();
+      if (isContextValid) {
+        sendResponse({ success: false, error: error.message });
+      }
+      if (error.message.includes('Extension context invalidated')) {
+        isContextValid = false;
+      }
+    }
+  })();
+  return true;
+});
+
+// Initial context check and setup
+if (isExtensionContextValid()) {
+  retryOperation(async () => {
+    await chrome.runtime.sendMessage({ action: 'contentScriptReady' });
+  }).catch(error => {
+    console.warn('Error during initialization:', error);
+    isContextValid = false;
+  });
+}
+
+// Handle unload
+window.addEventListener('unload', () => {
+  clearInterval(contextCheckInterval);
+  cleanup();
 });
 
 // Initialize highlight styles
 const style = document.createElement('style');
 style.textContent = `
+  .tts-highlight-container {
+    display: inline;
+  }
+  
   .tts-highlight {
     background-color: #fef08a;
     border-radius: 2px;
     padding: 2px 0;
+    display: inline;
   }
   
   @media (prefers-color-scheme: dark) {
@@ -299,8 +466,28 @@ style.textContent = `
       background-color: #854d0e;
     }
   }
+  
+  .tts-mini-player {
+    position: fixed;
+    z-index: 999999;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 0.2s;
+  }
+  
+  .tts-mini-player.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  
+  .dark-mode .tts-mini-player {
+    background: #1f2937;
+    color: white;
+  }
 `;
 document.head.appendChild(style);
-
-// Notify that content script is ready
-chrome.runtime.sendMessage({ action: 'contentScriptReady' });

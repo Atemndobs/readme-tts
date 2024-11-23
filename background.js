@@ -3,15 +3,40 @@ let floatingWindowId = null;
 let floatingTabId = null;
 let injectedTabs = new Set();
 
+// Maximum number of retries for operations
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+// Store blob URLs and their associated tabs
+const blobUrls = new Map();
+
 // Initialize extension
-chrome.runtime.onInstalled.addListener(() => {
-  // Clear any existing state
-  chrome.storage.local.clear();
-  injectedTabs.clear();
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    // Clear any existing state
+    await chrome.storage.local.clear();
+    injectedTabs.clear();
+    
+    // Create context menu
+    await chrome.contextMenus.create({
+      id: 'convertTextToSpeech',
+      title: 'raadMe - Read this text',
+      contexts: ['selection']
+    });
+  } catch (error) {
+    console.error('Error initializing extension:', error);
+  }
 });
 
 // Clean up when extension is updated or reloaded
 chrome.runtime.onSuspend.addListener(() => {
+  // Clean up all blob URLs
+  for (const [tabId] of blobUrls) {
+    revokeBlobUrlsForTab(tabId);
+  }
+  blobUrls.clear();
+  
+  // Clean up other resources
   injectedTabs.clear();
   if (floatingWindowId) {
     chrome.windows.remove(floatingWindowId);
@@ -34,29 +59,94 @@ function shouldInjectContentScript(url) {
   return url && !restrictedPatterns.some(pattern => url.startsWith(pattern));
 }
 
-// Function to handle tab updates
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url) {
+// Function to check if extension context is valid
+function isExtensionContextValid() {
+  try {
+    return typeof chrome !== 'undefined' && 
+           chrome?.runtime?.id !== undefined && 
+           chrome.runtime.getManifest() !== undefined;
+  } catch (e) {
+    console.warn('Extension context check failed:', e);
+    return false;
+  }
+}
+
+// Function to wait
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Function to retry an operation with exponential backoff
+async function retryOperation(operation, maxRetries = MAX_RETRIES) {
+  let lastError;
+  let delay = RETRY_DELAY;
+
+  for (let i = 0; i < maxRetries; i++) {
     try {
-      // Always enable the extension icon
-      await chrome.action.enable(tabId);
-      
-      // Only inject content script for valid URLs
-      if (shouldInjectContentScript(tab.url) && !injectedTabs.has(tabId)) {
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['content.js']
-        });
-        injectedTabs.add(tabId);
+      if (!isExtensionContextValid()) {
+        await wait(100); // Short wait to check context again
+        if (!isExtensionContextValid()) {
+          throw new Error('Extension context invalidated');
+        }
       }
+      return await operation();
     } catch (error) {
-      console.error('Error handling tab update:', error);
+      lastError = error;
+      console.warn(`Attempt ${i + 1}/${maxRetries} failed:`, error.message);
+      
+      if (error.message.includes('Extension context invalidated')) {
+        await wait(delay);
+        delay *= 2; // Exponential backoff
+      } else {
+        throw error;
+      }
     }
   }
-});
+  throw lastError;
+}
+
+// Function to handle tab updates with retry
+async function handleTabUpdate(tabId, changeInfo, tab) {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid during tab update');
+    return;
+  }
+  
+  if (changeInfo.status === 'complete' && tab.url) {
+    try {
+      await retryOperation(async () => {
+        // Check context before each operation
+        if (!isExtensionContextValid()) throw new Error('Extension context invalidated');
+        
+        // Enable the extension icon
+        await chrome.action.enable(tabId);
+        
+        // Only inject content script for valid URLs
+        if (shouldInjectContentScript(tab.url) && !injectedTabs.has(tabId)) {
+          await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            files: ['content.js']
+          });
+          injectedTabs.add(tabId);
+          
+          // Verify content script is responsive
+          await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+        }
+      });
+    } catch (error) {
+      console.error('Error handling tab update:', error);
+      // Remove from injected tabs if injection failed
+      injectedTabs.delete(tabId);
+    }
+  }
+}
+
+// Update event listeners to use retry mechanism
+chrome.tabs.onUpdated.addListener(handleTabUpdate);
 
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
+  revokeBlobUrlsForTab(tabId);
   injectedTabs.delete(tabId);
   if (tabId === floatingTabId) {
     floatingTabId = null;
@@ -66,10 +156,17 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid, rejecting message:', request.action);
+    sendResponse({ success: false, error: 'Extension context invalidated' });
+    return true;
+  }
+
   if (request.action === 'pageInteraction') {
     // Enable the extension icon when user interacts with the page
     chrome.action.enable(sender.tab.id);
   }
+  return true;
 });
 
 // Function to extract readable text from webpage
@@ -114,8 +211,51 @@ function splitIntoParagraphs(text) {
     .map(p => p.replace(/\s+/g, ' ')); // Normalize whitespace
 }
 
+// Function to create blob URL with proper cleanup
+function createBlobUrl(blob, tabId) {
+  // Ensure we're in the extension context
+  if (!chrome?.runtime?.id) {
+    throw new Error('Extension context invalidated');
+  }
+  
+  try {
+    // Create the blob URL
+    const url = URL.createObjectURL(blob);
+    
+    // Store the URL with its tab ID
+    if (!blobUrls.has(tabId)) {
+      blobUrls.set(tabId, new Set());
+    }
+    blobUrls.get(tabId).add(url);
+    
+    return url;
+  } catch (error) {
+    console.error('Error creating blob URL:', error);
+    throw error;
+  }
+}
+
+// Function to revoke blob URLs for a tab
+function revokeBlobUrlsForTab(tabId) {
+  if (blobUrls.has(tabId)) {
+    const urls = blobUrls.get(tabId);
+    for (const url of urls) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Error revoking blob URL:', error);
+      }
+    }
+    blobUrls.delete(tabId);
+  }
+}
+
 // Function to convert text to speech
-async function convertTextToSpeech(text) {
+async function convertTextToSpeech(text, tabId) {
+  if (!chrome?.runtime?.id) {
+    throw new Error('Extension context invalidated');
+  }
+
   try {
     const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
       method: 'POST',
@@ -123,10 +263,9 @@ async function convertTextToSpeech(text) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text: text,
-        voice: 'nova',
-        model: 'en-us-x-tts',
-        speed: 1.0
+        model: 'voice-en-us-amy-low',
+        input: text.trim(),
+        voice: 'voice-en-us-amy-low'
       })
     });
 
@@ -136,66 +275,67 @@ async function convertTextToSpeech(text) {
     }
 
     const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    return createBlobUrl(blob, tabId);
   } catch (error) {
     console.error('TTS conversion error:', error);
     throw error;
   }
 }
 
-// Function to inject content script
-async function ensureContentScriptInjected(tabId) {
-  try {
-    // Check if the content script is already injected
-    await chrome.tabs.sendMessage(tabId, { action: 'ping' });
-  } catch (error) {
-    // If we get an error, the content script is not injected yet
-    await chrome.scripting.insertCSS({
-      target: { tabId },
-      files: ['highlight.css', 'mini-player.css']
-    });
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content.js']
-    });
-  }
-}
-
-// Listen for tab updates to inject content script
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && shouldInjectContentScript(tab.url)) {
-    ensureContentScriptInjected(tabId);
-  }
-});
-
-// Handle text selection from content script
+// Handle messages with retry and proper cleanup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'convertSelection') {
-    convertTextToSpeech(request.text)
-      .then(audioUrl => {
-        sendResponse({ success: true, audioUrl });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid, rejecting message:', request.action);
+    sendResponse({ success: false, error: 'Extension context invalidated' });
     return true;
   }
+
+  const tabId = sender.tab?.id;
+  if (!tabId) {
+    sendResponse({ success: false, error: 'Invalid tab ID' });
+    return true;
+  }
+
+  if (request.action === 'convertSelection' || request.action === 'textSelected') {
+    (async () => {
+      try {
+        // Clean up previous blob URLs for this tab
+        revokeBlobUrlsForTab(tabId);
+        
+        const audioUrl = await retryOperation(async () => {
+          return await convertTextToSpeech(request.text, tabId);
+        });
+        
+        sendResponse({ success: true, audioUrl });
+      } catch (error) {
+        console.error('Error in convertSelection:', error);
+        sendResponse({ 
+          success: false, 
+          error: error.message || 'Failed to convert text to speech'
+        });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'contentScriptReady') {
+    // Content script is ready, we can now enable features for this tab
+    if (sender.tab?.id) {
+      chrome.action.enable(sender.tab.id);
+    }
+    return true;
+  }
+  return true;
 });
 
-// Create context menu items
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'convertTextToSpeech',
-    title: 'Convert to Speech',
-    contexts: ['selection']
-  });
-});
-
-// Handle context menu clicks
+// Handle context menu clicks with proper cleanup
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'convertTextToSpeech' && tab?.id) {
     try {
-      const audioUrl = await convertTextToSpeech(info.selectionText);
+      // Clean up previous blob URLs for this tab
+      revokeBlobUrlsForTab(tab.id);
+      
+      const audioUrl = await convertTextToSpeech(info.selectionText, tab.id);
       
       // Send audio URL to content script
       await chrome.tabs.sendMessage(tab.id, {

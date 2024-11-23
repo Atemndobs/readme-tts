@@ -5,6 +5,10 @@ let audioQueue = [];
 let isProcessingQueue = false;
 let savedInputText = null;
 
+// Maximum number of retries for operations
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
 // DOM Elements
 let convertButton;
 let textInput;
@@ -81,27 +85,67 @@ function initializeDarkMode() {
   });
 }
 
+// Function to check if extension context is valid
+function isExtensionContextValid() {
+  return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+}
+
+// Function to wait
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Function to retry an operation
+async function retryOperation(operation, maxRetries = MAX_RETRIES) {
+  let lastError;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (!isExtensionContextValid()) {
+        throw new Error('Extension context invalidated');
+      }
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (error.message.includes('Extension context invalidated')) {
+        console.log(`Attempt ${i + 1}/${maxRetries} failed due to invalid context, retrying...`);
+        await wait(RETRY_DELAY);
+      } else {
+        throw error; // If it's not a context error, throw immediately
+      }
+    }
+  }
+  throw lastError;
+}
+
 // Function to check text selection
 async function checkTextSelection() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return false;
-    
-    // Check for restricted URLs
-    const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
-    if (restrictedUrls.some(url => tab.url.startsWith(url))) {
-      console.log('Cannot access restricted URL:', tab.url);
-      return false;
-    }
+    return await retryOperation(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return false;
+      
+      // Check for restricted URLs
+      const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
+      if (tab.url && restrictedUrls.some(url => tab.url.startsWith(url))) {
+        console.log('Cannot access restricted URL:', tab.url);
+        return false;
+      }
 
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: () => window.getSelection().toString().trim()
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.getSelection().toString().trim()
+      });
+
+      return result.length > 0;
     });
-
-    return result.length > 0;
   } catch (error) {
     console.error('Error checking text selection:', error);
+    if (error.message.includes('Extension context invalidated')) {
+      if (selectionStatus) {
+        selectionStatus.textContent = 'Extension reloaded. Please refresh the page.';
+        selectionStatus.classList.add('text-red-500');
+      }
+    }
     return false;
   }
 }
@@ -109,32 +153,40 @@ async function checkTextSelection() {
 // Function to get selected text
 async function getSelectedText() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return '';
-    
-    // Check for restricted URLs
-    const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
-    if (restrictedUrls.some(url => tab.url.startsWith(url))) {
-      console.log('Cannot access restricted URL:', tab.url);
-      return '';
-    }
+    return await retryOperation(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return '';
+      
+      // Check for restricted URLs
+      const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
+      if (tab.url && restrictedUrls.some(url => tab.url.startsWith(url))) {
+        console.log('Cannot access restricted URL:', tab.url);
+        return '';
+      }
 
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: () => window.getSelection().toString().trim()
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.getSelection().toString().trim()
+      });
+
+      return result;
     });
-
-    return result;
   } catch (error) {
     console.error('Error getting selected text:', error);
+    if (error.message.includes('Extension context invalidated')) {
+      if (messageDiv) {
+        messageDiv.textContent = 'Extension reloaded. Please refresh the page.';
+        messageDiv.classList.add('text-red-500');
+      }
+    }
     return '';
   }
 }
 
 // Function to convert text to speech
-async function convertTextToSpeech(text) {
+async function convertTextToSpeech(input) {
   // Validate input text
-  if (!text || typeof text !== 'string' || !text.trim()) {
+  if (!input || typeof input !== 'string' || !input.trim()) {
     throw new Error('Please enter valid text to convert');
   }
 
@@ -156,7 +208,7 @@ async function convertTextToSpeech(text) {
       },
       body: JSON.stringify({
         model: selectedVoice,
-        input: text.trim(),
+        input: input.trim(),
         voice: selectedVoice
       })
     });
@@ -175,7 +227,7 @@ async function convertTextToSpeech(text) {
     const audioUrl = URL.createObjectURL(blob);
     
     // Create and add audio entry
-    const { element, audio, text: audioText } = createAudioEntry(text, audioUrl);
+    const { element, audio, text: audioText } = createAudioEntry(input, audioUrl);
     const audioContainer = document.getElementById('audioContainer');
     if (audioContainer) {
       audioContainer.prepend(element);
@@ -586,14 +638,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (convertButton) {
     convertButton.addEventListener("click", async () => {
       if (textInput?.value) {
-        const text = textInput.value;
+        const input = textInput.value;
         try {
           // Update button to show processing
           convertButton.disabled = true;
           convertButton.textContent = 'Processing text...';
 
           // Process text directly in chunks
-          const words = text.split(' ');
+          const words = input.split(' ');
           const chunks = [];
           let currentChunk = [];
           let currentSize = 0;
