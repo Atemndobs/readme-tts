@@ -539,28 +539,9 @@ function updateChunkDisplay(current, total) {
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
-  // try {
-  //   // Get selected text from storage
-  //   const { selectedText, autoConvert } = await chrome.storage.local.get(['selectedText', 'autoConvert']);
-  //   const textArea = document.getElementById("textInput");
-    
-  //   if (selectedText) {
-  //     textArea.value = selectedText;
-  //     // Clear the storage
-  //     await chrome.storage.local.remove('selectedText');
-      
-  //     // If autoConvert is true, trigger conversion automatically
-  //     if (autoConvert) {
-  //       await chrome.storage.local.remove('autoConvert');
-  //       const convertButton = document.getElementById('convert-button');
-  //       if (convertButton) {
-  //         convertButton.click();
-  //       }
-  //     }
-  //   }
-  // } catch (error) {
-  //   console.error('Error loading selected text:', error);
-  // }
+  // Check if this is a floating window
+  const urlParams = new URLSearchParams(window.location.search);
+  const isFloatingWindow = urlParams.get('floating') === 'true';
 
   // Initialize DOM elements
   convertButton = document.getElementById("convertButton");
@@ -892,7 +873,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Handle messages from background script
   const messageListener = (message, sender, sendResponse) => {
-    if (message.action === "newTextSelected" && message.text && textInput) {
+    if (isFloatingWindow && message.action === "newTextSelected" && message.text && textInput) {
       textInput.value = message.text;
       if (convertButton) {
         convertButton.disabled = false;

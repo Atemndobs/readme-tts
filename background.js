@@ -326,13 +326,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Function to create floating window
 async function createFloatingWindow(selectedText = '') {
   try {
+    // If there's already a window open, focus it and update the text
+    if (floatingWindowId !== null) {
+      try {
+        const existingWindow = await chrome.windows.get(floatingWindowId);
+        // Update the selected text
+        await chrome.storage.local.set({ 
+          selectedText,
+          autoConvert: true
+        });
+        // Focus the existing window
+        await chrome.windows.update(floatingWindowId, { focused: true });
+        // Send message to the popup tab to update the text and convert
+        if (floatingTabId !== null) {
+          await chrome.tabs.sendMessage(floatingTabId, {
+            action: "newTextSelected",
+            text: selectedText
+          });
+        }
+        return existingWindow;
+      } catch (error) {
+        // If window not found, reset the ID and continue to create new window
+        floatingWindowId = null;
+        floatingTabId = null;
+      }
+    }
+
     const width = 500;
     const height = 700;
     
-    // Get the current window to calculate the center position
+    // Get the current window to calculate the top right position
     const currentWindow = await chrome.windows.getCurrent();
-    const left = Math.round(currentWindow.left + (currentWindow.width - width) / 2);
-    const top = Math.round(currentWindow.top + (currentWindow.height - height) / 2);
+    const left = currentWindow.left + currentWindow.width - width - 20; // 20px padding from right edge
+    const top = currentWindow.top + 20; // 20px padding from top edge
     
     // Store the selected text before creating the window
     await chrome.storage.local.set({ 
@@ -341,12 +367,14 @@ async function createFloatingWindow(selectedText = '') {
     });
     
     const window = await chrome.windows.create({
-      url: chrome.runtime.getURL("popup.html"),
+      url: chrome.runtime.getURL("popup.html?floating=true"),
       type: "popup",
       width: width,
       height: height,
       left: left,
-      top: top
+      top: top,
+      focused: true,
+      state: "normal"
     });
 
     floatingWindowId = window.id;
