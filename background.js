@@ -357,7 +357,7 @@ async function createFloatingWindow(selectedText = '') {
     }
 
     const width = 480;
-    const height = 580;
+    const height = 420;
     
     // Position at top left of screen
     const left = 20; // 20px padding from left edge of screen

@@ -131,59 +131,32 @@ select {
 }
 
 #convertPageButton {
-  height: 34px;
-  padding: 0 16px;
-  background-color: #2196f3;
-  color: white;
+  background: none;
   border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
+  color: inherit;
   cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  opacity: 0.7;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: background-color 0.3s;
-  white-space: nowrap;
+  gap: 4px;
+  font-size: inherit;
 }
 
 #convertPageButton:hover {
-  background-color: #1976d2;
-}
-
-#convertPageButton:active {
-  background-color: #1565c0;
-}
-
-#convertPageButton i {
-  font-size: 14px;
-}
-
-/* Dark mode styles */
-.dark-mode #pageUrlInput {
-  background-color: #333;
-  border-color: #555;
-  color: #fff;
-}
-
-.dark-mode #pageUrlInput:focus {
-  border-color: #64b5f6;
-}
-
-.dark-mode #pageUrlInput::placeholder {
-  color: #888;
-}
-
-.dark-mode #convertPageButton {
-  background-color: #64b5f6;
+  background-color: rgba(0, 0, 0, 0.1);
+  opacity: 1;
 }
 
 .dark-mode #convertPageButton:hover {
-  background-color: #42a5f5;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-.dark-mode #convertPageButton:active {
-  background-color: #2196f3;
+#convertPageButton i {
+  transition: transform 0.3s ease;
+  font-size: inherit;
 }
 
 /* Convert button styling */
@@ -271,12 +244,14 @@ select {
 }
 
 #audioContainer::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.2);
+    /* background: rgba(0, 0, 0, 0.2); */
+    background-color: #1a1a1a;
     border-radius: 4px;
 }
 
 .dark-mode #audioContainer::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    /* background: rgba(255, 255, 255, 0.2);   */
+    background-color: #1a1a1a;
 }
 
 #audioContainer audio {
@@ -303,7 +278,8 @@ audio {
 }
 
 .dark-mode .audio-item {
-    background: rgba(255, 255, 255, 0.05);
+    /* background: rgba(255, 255, 255, 0.05); */
+    background-color: #1a1a1a;
 }
 
 .text-preview {
@@ -363,9 +339,9 @@ audio {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  margin: 16px 0;
+  /* gap: 16px; */
+  /* padding: 16px; */
+  /* margin: 16px 0; */
   background-color: #f5f5f5;
   border-radius: 8px;
   width: 100%;
@@ -373,7 +349,8 @@ audio {
 }
 
 .dark-mode .audio-player-container {
-  background-color: #2d2d2d;
+  /* background-color: #2d2d2d; */
+  background-color: #1a1a1a;
 }
 
 .navigation-controls {
@@ -567,6 +544,18 @@ audio {
   text-align: center;
 }
 
+/* Audio player top bar */
+.audio-top-bar {
+  display: flex;
+  justify-content: center;
+  /* padding: 8px 0; */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .audio-top-bar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 /* Highlight styles */
 .tts-highlight {
     background-color: #ffd700;
@@ -696,4 +685,143 @@ select {
 
 .dark-mode .icon-button {
   color: #f3f4f6;
+}
+
+/* Settings controls */
+/* .settings-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+} */
+
+/* .language-display {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  min-width: 24px;
+  text-align: center;
+} */
+
+
+.language-display {
+  position: absolute;
+  top: 40px;
+  left: 6%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #999;
+}
+
+/* Refresh button styling */
+#refreshButton {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+#refreshButton:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode #refreshButton:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+#refreshButton i {
+  transition: transform 0.3s ease-in-out;
+}
+
+#refreshButton:active i {
+  transform: rotate(180deg);
+}
+
+/* Message styling */
+#message {
+  text-align: center;
+  margin: 10px 0;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+#message.success {
+  color: #155724;
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.dark-mode #message.success {
+  color: #98c9a3;
+  background-color: #1e4027;
+  border: 1px solid #2a543a;
+}
+
+#message.error {
+  color: #721c24;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+}
+
+.dark-mode #message.error {
+  color: #e6a5a5;
+  background-color: #402020;
+  border: 1px solid #542a2a;
+}
+
+/* Text input toggle controls */
+.text-input-controls {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.toggle-button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  opacity: 0.7;
+}
+
+.toggle-button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  opacity: 1;
+}
+
+.dark-mode .toggle-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.toggle-button i {
+  transition: transform 0.3s ease;
+}
+
+.toggle-button.collapsed i {
+  transform: rotate(180deg);
+}
+
+.text-input-container {
+  max-height: 300px;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  margin-bottom: 10px;
+}
+
+.text-input-container.collapsed {
+  max-height: 0;
+  margin-bottom: 0;
 }
