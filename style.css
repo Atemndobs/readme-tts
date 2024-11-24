@@ -131,59 +131,32 @@ select {
 }
 
 #convertPageButton {
-  height: 34px;
-  padding: 0 16px;
-  background-color: #2196f3;
-  color: white;
+  background: none;
   border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
+  color: inherit;
   cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  opacity: 0.7;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: background-color 0.3s;
-  white-space: nowrap;
+  gap: 4px;
+  font-size: inherit;
 }
 
 #convertPageButton:hover {
-  background-color: #1976d2;
-}
-
-#convertPageButton:active {
-  background-color: #1565c0;
-}
-
-#convertPageButton i {
-  font-size: 14px;
-}
-
-/* Dark mode styles */
-.dark-mode #pageUrlInput {
-  background-color: #333;
-  border-color: #555;
-  color: #fff;
-}
-
-.dark-mode #pageUrlInput:focus {
-  border-color: #64b5f6;
-}
-
-.dark-mode #pageUrlInput::placeholder {
-  color: #888;
-}
-
-.dark-mode #convertPageButton {
-  background-color: #64b5f6;
+  background-color: rgba(0, 0, 0, 0.1);
+  opacity: 1;
 }
 
 .dark-mode #convertPageButton:hover {
-  background-color: #42a5f5;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-.dark-mode #convertPageButton:active {
-  background-color: #2196f3;
+#convertPageButton i {
+  transition: transform 0.3s ease;
+  font-size: inherit;
 }
 
 /* Convert button styling */
