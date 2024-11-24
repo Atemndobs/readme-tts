@@ -183,6 +183,78 @@ async function getSelectedText() {
   }
 }
 
+// Function to split text into chunks
+async function splitIntoChunks(text) {
+  console.log('Splitting text into chunks:', text);
+  
+  // Split text into paragraphs and headings
+  const normalizedText = text
+    .replace(/\r\n/g, '\n')  // Normalize line endings
+    .replace(/[\t ]+\n/g, '\n')  // Remove trailing spaces
+    .replace(/\n{3,}/g, '\n\n'); // Normalize multiple line breaks
+
+  console.log('Normalized text:', normalizedText);
+
+  // Split into initial segments (paragraphs)
+  const segments = normalizedText.split(/\n\s*\n+/);
+  console.log('Initial segments:', segments);
+  
+  // Process each segment and detect headings
+  const chunks = [];
+  for (const segment of segments) {
+    const lines = segment.split('\n');
+    console.log('Processing segment lines:', lines);
+    
+    let currentParagraph = [];
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // Check if line is a heading/title
+      const isHeading = (
+        /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
+        /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
+        (trimmedLine.length < 100 && 
+         !/[.!?:,;]$/.test(trimmedLine) && 
+         /^[A-Z]/.test(trimmedLine) && 
+         trimmedLine.split(' ').length <= 5) || // Short title-like lines (max 5 words)
+        (trimmedLine.toUpperCase() === trimmedLine && 
+         trimmedLine.length < 100 && 
+         !/[.!?:,;]$/.test(trimmedLine)) // ALL CAPS lines without ending punctuation
+      );
+
+      console.log('Line:', trimmedLine, 'isHeading:', isHeading);
+
+      if (isHeading) {
+        // If we have accumulated paragraph text, add it as a chunk
+        if (currentParagraph.length > 0) {
+          const paragraphText = currentParagraph.join(' ').replace(/\s+/g, ' ').trim();
+          console.log('Adding paragraph chunk:', paragraphText);
+          chunks.push(paragraphText);
+          currentParagraph = [];
+        }
+        // Add the heading as its own chunk
+        console.log('Adding heading chunk:', trimmedLine);
+        chunks.push(trimmedLine);
+      } else {
+        currentParagraph.push(trimmedLine);
+      }
+    }
+
+    // Add any remaining paragraph text
+    if (currentParagraph.length > 0) {
+      const paragraphText = currentParagraph.join(' ').replace(/\s+/g, ' ').trim();
+      console.log('Adding final paragraph chunk:', paragraphText);
+      chunks.push(paragraphText);
+    }
+  }
+
+  const finalChunks = chunks.filter(chunk => chunk.length > 0);
+  console.log('Final chunks:', finalChunks);
+  return finalChunks;
+}
+
 // Function to convert text to speech
 async function convertTextToSpeech(input) {
   // Validate input text
@@ -201,39 +273,60 @@ async function convertTextToSpeech(input) {
   }
   
   try {
-    const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: selectedVoice,
-        input: input.trim(),
-        voice: selectedVoice
-      })
-    });
+    const chunks = await splitIntoChunks(input);
+    console.log('Converting chunks:', chunks);
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('API Error:', errorData);
-      throw new Error(`Server error: ${response.status}`);
+    for (const chunk of chunks) {
+      if (!chunk.trim()) continue;
+
+      const button = document.getElementById('convertButton');
+      if (button) {
+        button.textContent = 'Converting...';
+        button.disabled = true;
+      }
+
+      const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedVoice,
+          input: chunk.trim(),
+          voice: selectedVoice
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('API Error:', errorData);
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      if (blob.size === 0) {
+        throw new Error('Received empty audio data');
+      }
+
+      const audioUrl = URL.createObjectURL(blob);
+      
+      // Create and add audio entry
+      const { element, audio, text: audioText } = createAudioEntry(chunk, audioUrl);
+      const audioContainer = document.getElementById('audioContainer');
+      if (audioContainer) {
+        audioContainer.prepend(element);
+        addToAudioQueue({ element, audio, text: audioText });
+      }
     }
 
-    const blob = await response.blob();
-    if (blob.size === 0) {
-      throw new Error('Received empty audio data');
+    const button = document.getElementById('convertButton');
+    if (button) {
+      button.textContent = 'Conversion Complete!';
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = 'Convert to Speech';
+      }, 2000);
     }
-
-    const audioUrl = URL.createObjectURL(blob);
-    
-    // Create and add audio entry
-    const { element, audio, text: audioText } = createAudioEntry(input, audioUrl);
-    const audioContainer = document.getElementById('audioContainer');
-    if (audioContainer) {
-      audioContainer.prepend(element);
-      addToAudioQueue({ element, audio, text: audioText });
-    }
-    
   } catch (error) {
     console.error('Error converting text to speech:', error);
     if (selectionStatus) {
@@ -490,7 +583,7 @@ function isValidUrl(url) {
   return url && !restrictedPatterns.some(pattern => url.startsWith(pattern));
 }
 
-// Function to handle webpage text conversion
+// Function to check webpage text conversion
 async function handleWebPageConversion(chunks, totalChunks) {
   if (!chunks || chunks.length === 0) return;
   
@@ -648,29 +741,51 @@ document.addEventListener('DOMContentLoaded', async () => {
           convertButton.disabled = true;
           convertButton.textContent = 'Processing text...';
 
-          // Process text directly in chunks
-          const words = input.split(' ');
-          const chunks = [];
-          let currentChunk = [];
-          let currentSize = 0;
-          const chunkSize = 1000;
+          // Split text into paragraphs and headings
+          const normalizedText = input
+            .replace(/\r\n/g, '\n')
+            .replace(/[\t ]+\n/g, '\n');
 
-          for (const word of words) {
-            if (currentSize + word.length > chunkSize) {
-              chunks.push(currentChunk.join(' '));
-              currentChunk = [word];
-              currentSize = word.length;
-            } else {
-              currentChunk.push(word);
-              currentSize += word.length + 1; // +1 for space
+          // Split into initial segments
+          const segments = normalizedText.split(/\n\s*\n+/);
+          
+          // Process each segment and detect headings
+          const chunks = [];
+          for (const segment of segments) {
+            const lines = segment.split('\n');
+            let currentParagraph = [];
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (!trimmedLine) continue;
+
+              // Check if line is a heading/title
+              const isHeading = (
+                /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
+                /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
+                (trimmedLine.length < 100 && !/[.!?:,;]$/.test(trimmedLine) && /^[A-Z]/.test(trimmedLine)) || // Short title-like lines
+                (trimmedLine.toUpperCase() === trimmedLine && trimmedLine.length < 100) // ALL CAPS lines
+              );
+
+              if (isHeading) {
+                if (currentParagraph.length > 0) {
+                  chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
+                  currentParagraph = [];
+                }
+                chunks.push(trimmedLine);
+              } else {
+                currentParagraph.push(trimmedLine);
+              }
+            }
+
+            if (currentParagraph.length > 0) {
+              chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
             }
           }
 
-          if (currentChunk.length > 0) {
-            chunks.push(currentChunk.join(' '));
-          }
+          const finalChunks = chunks.filter(chunk => chunk.length > 0);
 
-          console.log('Created chunks:', chunks.length);
+          console.log('Created chunks:', finalChunks.length);
           
           // Reset audio queue
           audioQueue = [];
@@ -685,13 +800,22 @@ document.addEventListener('DOMContentLoaded', async () => {
           updatePlayerUI(null);
 
           // Process chunks
-          for (let i = 0; i < chunks.length; i++) {
-            convertButton.textContent = `Converting chunk ${i + 1}/${chunks.length}...`;
+          for (let i = 0; i < finalChunks.length; i++) {
+            const chunk = finalChunks[i];
+            // Detect if this chunk is a heading
+            const isHeading = (
+              /^#{1,6}\s+/.test(chunk) || // Markdown headings
+              /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(chunk) || // Numbered headings
+              (chunk.length < 100 && !/[.!?:,;]$/.test(chunk) && /^[A-Z]/.test(chunk)) || // Short title-like lines
+              (chunk.toUpperCase() === chunk && chunk.length < 100) // ALL CAPS lines
+            );
+
+            convertButton.textContent = `Converting ${isHeading ? 'heading' : 'paragraph'} ${i + 1}/${finalChunks.length}...`;
             try {
-              await convertTextToSpeech(chunks[i]);
+              await convertTextToSpeech(finalChunks[i]);
             } catch (error) {
-              console.error(`Error converting chunk ${i + 1}:`, error);
-              convertButton.textContent = `Error in chunk ${i + 1}: ${error.message}`;
+              console.error(`Error converting ${isHeading ? 'heading' : 'paragraph'} ${i + 1}:`, error);
+              convertButton.textContent = `Error in ${isHeading ? 'heading' : 'paragraph'} ${i + 1}: ${error.message}`;
               await new Promise(resolve => setTimeout(resolve, 2000)); // Show error for 2 seconds
             }
           }
@@ -872,15 +996,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Handle messages from background script
-  const messageListener = (message, sender, sendResponse) => {
+  const messageListener = async (message, sender, sendResponse) => {
     if (isFloatingWindow && message.action === "newTextSelected" && message.text && textInput) {
       textInput.value = message.text;
       if (convertButton) {
         convertButton.disabled = false;
       }
-      convertTextToSpeech(message.text);
+      console.log("Processing selected text:", message.text);
+      
+      try {
+        await convertTextToSpeech(message.text);
+      } catch (error) {
+        console.error('Error processing chunks:', error);
+        if (convertButton) {
+          convertButton.textContent = `Error: ${error.message}`;
+          setTimeout(() => {
+            convertButton.disabled = false;
+            convertButton.textContent = 'Convert to Speech';
+          }, 2000);
+        }
+      }
     }
   };
+
   chrome.runtime.onMessage.addListener(messageListener);
 
   // Open floating window

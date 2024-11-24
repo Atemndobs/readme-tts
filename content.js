@@ -289,42 +289,98 @@ function createAndPlayAudio(audioUrl) {
   }
 }
 
+// Function to get formatted text from selection
+function getFormattedSelection() {
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return '';
+
+  // Create a temporary div to hold the selection
+  const container = document.createElement('div');
+  const range = selection.getRangeAt(0);
+  
+  // Clone the contents to preserve structure
+  container.appendChild(range.cloneContents());
+  
+  // Replace <div>, <p>, and block elements with double newlines
+  const blockElements = container.querySelectorAll('div, p, h1, h2, h3, h4, h5, h6, li, tr, pre, blockquote');
+  blockElements.forEach(el => {
+    // Don't add extra newlines for nested blocks
+    if (!el.closest('div:not(:first-child), p:not(:first-child)')) {
+      el.insertAdjacentText('beforebegin', '\n\n');
+    }
+    // Preserve single newlines within blocks
+    if (el.nextSibling) {
+      el.insertAdjacentText('afterend', '\n');
+    }
+  });
+
+  // Replace <br> with newlines
+  const brs = container.getElementsByTagName('br');
+  Array.from(brs).forEach(br => {
+    br.insertAdjacentText('afterend', '\n');
+  });
+
+  // Get text content while preserving line breaks
+  let text = container.innerText || container.textContent;
+  
+  // Normalize line breaks
+  text = text
+    .replace(/\r\n/g, '\n') // Normalize Windows line endings
+    .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive line breaks
+    .trim();
+
+  console.log('Formatted selection:', text);
+  return text;
+}
+
 // Handle messages from the extension with context check
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (!isContextValid) {
     console.warn('Extension context invalid, ignoring message');
     sendResponse({ success: false, error: 'Extension context invalidated' });
-    return true;
+    return false;  // Don't keep message channel open if context is invalid
   }
 
-  try {
-    switch (request.action) {
-      case 'highlight':
-        highlightText(request.text);
-        sendResponse({ success: true });
-        break;
-      case 'ping':
-        sendResponse({ success: true });
-        break;
-      case 'playAudio':
-        createAndPlayAudio(request.audioUrl);
-        if (request.text) {
-          highlightText(request.text);
-        }
-        sendResponse({ success: true });
-        break;
-      default:
-        sendResponse({ success: false, error: 'Unknown action' });
+  // Handle async operations
+  const handleAsync = async () => {
+    try {
+      switch (request.action) {
+        case 'highlight':
+          await highlightText(request.text);
+          return { success: true };
+        case 'ping':
+          return { success: true };
+        case 'playAudio':
+          await createAndPlayAudio(request.audioUrl);
+          if (request.text) {
+            await highlightText(request.text);
+          }
+          return { success: true };
+        case 'getSelection':
+          return { success: true, text: getFormattedSelection() };
+        default:
+          return { success: false, error: 'Unknown action' };
+      }
+    } catch (error) {
+      console.error('Message handling error:', error);
+      cleanup();
+      if (error.message.includes('Extension context invalidated')) {
+        isContextValid = false;
+      }
+      return { success: false, error: error.message };
     }
-  } catch (error) {
-    console.error('Message handling error:', error);
-    cleanup();
-    sendResponse({ success: false, error: error.message });
-    if (error.message.includes('Extension context invalidated')) {
-      isContextValid = false;
+  };
+
+  // Execute async operation and send response
+  handleAsync().then(response => {
+    try {
+      sendResponse(response);
+    } catch (error) {
+      console.warn('Error sending response:', error);
     }
-  }
-  return true;
+  });
+
+  return true;  // Keep message channel open for async response
 });
 
 // Initialize highlight styles

@@ -175,90 +175,92 @@ function extractReadableText() {
   return content.replace(/\s+/g, ' ').trim();
 }
 
-// Function to chunk text
-function chunkText(text, chunkSize = 1000) {
-  const words = text.split(' ');
-  const chunks = [];
-  let currentChunk = [];
-  let currentSize = 0;
+// // Function to chunk text
+// function chunkText(text, chunkSize = 100) {
+//   const words = text.split(' ');
+//   const chunks = [];
+//   let currentChunk = [];
+//   let currentSize = 0;
 
-  for (const word of words) {
-    if (currentSize + word.length > chunkSize) {
-      chunks.push(currentChunk.join(' '));
-      currentChunk = [word];
-      currentSize = word.length;
-    } else {
-      currentChunk.push(word);
-      currentSize += word.length + 1; // +1 for space
-    }
-  }
+//   for (const word of words) {
+//     if (currentSize + word.length > chunkSize) {
+//       chunks.push(currentChunk.join(' '));
+//       currentChunk = [word];
+//       currentSize = word.length;
+//     } else {
+//       currentChunk.push(word);
+//       currentSize += word.length + 1; // +1 for space
+//     }
+//   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(' '));
-  }
+//   if (currentChunk.length > 0) {
+//     chunks.push(currentChunk.join(' '));
+//   }
 
-  return chunks;
-}
+//   return chunks;
+// }
 
-// Function to split text into paragraphs
-function splitIntoParagraphs(text) {
-  // Split by common paragraph separators
-  const rawParagraphs = text.split(/(?:\r?\n\r?\n|\r\r)/);
+// // Function to split text into paragraphs
+// function splitIntoParagraphs(text) {
+//   // Split by common paragraph separators
+//   const rawParagraphs = text.split(/(?:\r?\n\r?\n|\r\r)/);
   
-  return rawParagraphs
-    .map(p => p.trim())
-    .filter(p => p.length > 0 && p.split(/\s+/).length > 3) // Filter out empty and very short paragraphs
-    .map(p => p.replace(/\s+/g, ' ')); // Normalize whitespace
-}
+//   return rawParagraphs
+//     .map(p => p.trim())
+//     .filter(p => p.length > 0 && p.split(/\s+/).length > 3) // Filter out empty and very short paragraphs
+//     .map(p => p.replace(/\s+/g, ' ')); // Normalize whitespace
+// }
 
-// Function to convert text to speech and create blob URL
-async function convertTextToSpeech(text, tabId) {
-  // Ensure we're in extension context
-  if (!chrome?.runtime?.id) {
-    throw new Error('Extension context invalidated');
-  }
+// // Function to convert text to speech and create blob URL
+// async function convertTextToSpeech(text, tabId) {
+//   console.log('Converting text to speech:', text);
+  
+//   // Ensure we're in extension context
+//   if (!chrome?.runtime?.id) {
+//     throw new Error('Extension context invalidated');
+//   }
 
-  try {
-    const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'voice-en-us-amy-low',
-        input: text.trim(),
-        voice: 'voice-en-us-amy-low'
-      })
-    });
+//   try {
+//     const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
+//       method: 'POST',
+//       headers: {
+//         'Content-Type': 'application/json',
+//       },
+//       body: JSON.stringify({
+//         model: 'voice-en-us-amy-low',
+//         input: text.trim(),
+//         voice: 'voice-en-us-amy-low'
+//       })
+//     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to convert text to speech');
-    }
+//     if (!response.ok) {
+//       const error = await response.json();
+//       throw new Error(error.error?.message || 'Failed to convert text to speech');
+//     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const blob = new Blob([arrayBuffer], { type: 'audio/mp3' });
+//     const arrayBuffer = await response.arrayBuffer();
+//     const blob = new Blob([arrayBuffer], { type: 'audio/mp3' });
     
-    // Create blob URL in a try-catch block
-    try {
-      const url = window.URL.createObjectURL(blob);
+//     // Create blob URL in a try-catch block
+//     try {
+//       const url = window.URL.createObjectURL(blob);
       
-      // Store the URL with its tab ID
-      if (!blobUrls.has(tabId)) {
-        blobUrls.set(tabId, new Set());
-      }
-      blobUrls.get(tabId).add(url);
+//       // Store the URL with its tab ID
+//       if (!blobUrls.has(tabId)) {
+//         blobUrls.set(tabId, new Set());
+//       }
+//       blobUrls.get(tabId).add(url);
       
-      return url;
-    } catch (blobError) {
-      console.error('Error creating blob URL:', blobError);
-      throw new Error('Failed to create audio URL');
-    }
-  } catch (error) {
-    console.error('TTS conversion error:', error);
-    throw error;
-  }
-}
+//       return url;
+//     } catch (blobError) {
+//       console.error('Error creating blob URL:', blobError);
+//       throw new Error('Failed to create audio URL');
+//     }
+//   } catch (error) {
+//     console.error('TTS conversion error:', error);
+//     throw error;
+//   }
+// }
 
 // Function to revoke blob URLs for a tab
 function revokeBlobUrlsForTab(tabId) {
@@ -396,14 +398,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       // Clean up previous blob URLs for this tab
       revokeBlobUrlsForTab(tab.id);
       
+      // Get formatted selection from content script
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to get formatted selection');
+      }
+
       // Open floating window with selected text
-      await createFloatingWindow(info.selectionText);
+      await createFloatingWindow(response.text);
     } catch (error) {
       console.error('Error processing text to speech:', error);
       // Show error notification
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'images/icon128.png',
+        iconUrl: 'icon/icons8-voice-recognition-128.png',
         title: 'Text-to-Speech Error',
         message: error.message || 'Failed to process text to speech'
       });
