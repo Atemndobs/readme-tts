@@ -41,11 +41,6 @@
     </div>
   </div>
 
-  <div class="text-input-controls">
-    <button id="toggleTextInput" title="Toggle Text Input" class="toggle-button">
-      <i class="fa-solid fa-chevron-up"></i>
-    </button>
-  </div>
   <div id="textInputContainer" class="text-input-container">
     <textarea id="textInput" placeholder="Enter text here"></textarea>
     <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
@@ -54,6 +49,11 @@
   
   <!-- Custom Audio Player -->
   <div id="audioPlayerContainer" class="audio-player-container">
+    <div class="audio-top-bar">
+      <button id="toggleTextInput" title="Toggle Text Input" class="toggle-button">
+        <i class="fa-solid fa-chevron-up"></i>
+      </button>
+    </div>
     <div class="navigation-controls">
       <button id="prevAudio" class="nav-button" title="Previous Audio Paragraph">
         <i class="fa-solid fa-backward"></i>

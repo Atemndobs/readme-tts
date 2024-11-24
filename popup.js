@@ -1008,8 +1008,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const textInputContainer = document.getElementById('textInputContainer');
   
   if (toggleButton && textInputContainer) {
-    // Load saved state
-    const isCollapsed = localStorage.getItem('textInputCollapsed') === 'true';
+    // Load saved state or default to collapsed
+    const isCollapsed = localStorage.getItem('textInputCollapsed') !== 'false'; // Default to true
     if (isCollapsed) {
       toggleButton.classList.add('collapsed');
       textInputContainer.classList.add('collapsed');
