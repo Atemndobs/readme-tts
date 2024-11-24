@@ -828,6 +828,24 @@ async function applySettings() {
   }, 100);
 }
 
+// Function to update language display
+function updateLanguageDisplay(model) {
+  const languageDisplay = document.getElementById('currentLanguage');
+  if (!languageDisplay) return;
+
+  // Extract language code from model name
+  const languageMap = {
+    'en': 'EN',
+    'de': 'DE',
+    'es': 'ES',
+    'fr': 'FR',
+    'it': 'IT'
+  };
+
+  const langCode = model.split('-')[1]?.toLowerCase() || 'en';
+  languageDisplay.textContent = languageMap[langCode] || 'EN';
+}
+
 // Settings modal handlers
 document.getElementById('settingsButton').addEventListener('click', () => {
   // Load current settings
@@ -862,6 +880,7 @@ document.getElementById('settingsModal').addEventListener('click', (e) => {
 document.getElementById('modelSelect').addEventListener('change', (e) => {
   console.log('Model changed to:', e.target.value);
   updateVoiceOptions(e.target.value);
+  updateLanguageDisplay(e.target.value);
 });
 
 document.getElementById('voiceSelect').addEventListener('change', (e) => {
@@ -1342,4 +1361,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Then initialize settings
   await initializeSettings();
+  const settings = await loadSettings();
+  updateLanguageDisplay(settings.model);
 });

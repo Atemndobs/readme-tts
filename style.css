@@ -697,3 +697,35 @@ select {
 .dark-mode .icon-button {
   color: #f3f4f6;
 }
+
+/* Settings controls */
+/* .settings-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+} */
+
+/* .language-display {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  min-width: 24px;
+  text-align: center;
+} */
+
+
+.language-display {
+  position: absolute;
+  top: 40px;
+  left: 6%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #999;
+}
