@@ -376,8 +376,8 @@ audio {
 }
 
 .dark-mode .audio-player-container {
-  /* background-color: #2d2d2d; */
-  background-color: #1a1a1a;
+  background-color: #2d2d2d;
+  /* background-color: #1a1a1a; */
 }
 
 .navigation-controls {
@@ -792,4 +792,47 @@ select {
   color: #e6a5a5;
   background-color: #402020;
   border: 1px solid #542a2a;
+}
+
+/* Text input toggle controls */
+.text-input-controls {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.toggle-button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.toggle-button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .toggle-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.toggle-button i {
+  transition: transform 0.3s ease;
+}
+
+.toggle-button.collapsed i {
+  transform: rotate(180deg);
+}
+
+.text-input-container {
+  max-height: 300px;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.text-input-container.collapsed {
+  max-height: 0;
 }

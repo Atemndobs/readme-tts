@@ -41,8 +41,15 @@
     </div>
   </div>
 
-  <textarea id="textInput" placeholder="Enter text here"></textarea>
-  <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
+  <div class="text-input-controls">
+    <button id="toggleTextInput" title="Toggle Text Input" class="toggle-button">
+      <i class="fa-solid fa-chevron-up"></i>
+    </button>
+  </div>
+  <div id="textInputContainer" class="text-input-container">
+    <textarea id="textInput" placeholder="Enter text here"></textarea>
+    <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
+  </div>
   <div id="message"></div>
   
   <!-- Custom Audio Player -->

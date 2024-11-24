@@ -1003,6 +1003,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Initialize text input toggle
+  const toggleButton = document.getElementById('toggleTextInput');
+  const textInputContainer = document.getElementById('textInputContainer');
+  
+  if (toggleButton && textInputContainer) {
+    // Load saved state
+    const isCollapsed = localStorage.getItem('textInputCollapsed') === 'true';
+    if (isCollapsed) {
+      toggleButton.classList.add('collapsed');
+      textInputContainer.classList.add('collapsed');
+    }
+
+    toggleButton.addEventListener('click', () => {
+      // Toggle collapsed state
+      toggleButton.classList.toggle('collapsed');
+      textInputContainer.classList.toggle('collapsed');
+      
+      // Save state
+      localStorage.setItem('textInputCollapsed', textInputContainer.classList.contains('collapsed'));
+    });
+  }
+
   // Initialize dark mode
   initializeDarkMode();
   
