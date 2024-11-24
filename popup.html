@@ -21,6 +21,9 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     </button>
+    <button title="Refresh Page" id="refreshButton">
+      <i class="fa-solid fa-arrows-rotate"></i>
+    </button>
     <button title="Close Window" id="closeButton">
       <i class="fa-solid fa-xmark"></i>
     </button>
@@ -39,7 +42,7 @@
   </div>
 
   <textarea id="textInput" placeholder="Enter text here"></textarea>
-  <button id="convertButton" title="Convert Text to Speech">Convert to Speech</button>
+  <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
   <div id="message"></div>
   
   <!-- Custom Audio Player -->

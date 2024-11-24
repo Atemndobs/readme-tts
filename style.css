@@ -733,3 +733,63 @@ select {
   gap: 8px;
   color: #999;
 }
+
+/* Refresh button styling */
+#refreshButton {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+#refreshButton:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode #refreshButton:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+#refreshButton i {
+  transition: transform 0.3s ease-in-out;
+}
+
+#refreshButton:active i {
+  transform: rotate(180deg);
+}
+
+/* Message styling */
+#message {
+  text-align: center;
+  margin: 10px 0;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+#message.success {
+  color: #155724;
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.dark-mode #message.success {
+  color: #98c9a3;
+  background-color: #1e4027;
+  border: 1px solid #2a543a;
+}
+
+#message.error {
+  color: #721c24;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+}
+
+.dark-mode #message.error {
+  color: #e6a5a5;
+  background-color: #402020;
+  border: 1px solid #542a2a;
+}

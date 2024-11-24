@@ -22,6 +22,7 @@ let selectionStatus;
 let urlInput;
 let convertPageButton;
 let openInFloatingWindow;
+let refreshButton;
 
 // Model to voices mapping
 const modelToVoices = {
@@ -329,9 +330,9 @@ async function convertTextToSpeech(text) {
       throw new Error('Extension context invalid');
     }
 
-    if (messageDiv) {
-      messageDiv.textContent = 'Converting text to speech...';
-    }
+    // if (messageDiv) {
+    //   messageDiv.textContent = 'Converting text to speech...';
+    // }
 
     console.log('Making API request with:', {
       input: text,
@@ -371,12 +372,12 @@ async function convertTextToSpeech(text) {
     const audioEntry = createAudioEntry(text, audioUrl);
     addToAudioQueue(audioEntry);
 
-    if (messageDiv) {
-      messageDiv.textContent = 'Audio ready to play';
-      setTimeout(() => {
-        messageDiv.textContent = '';
-      }, 2000);
-    }
+    // if (messageDiv) {
+    //   messageDiv.textContent = 'Audio ready to play';
+    //   setTimeout(() => {
+    //     messageDiv.textContent = '';
+    //   }, 2000);
+    // }
 
   } catch (error) {
     console.error('Error converting text to speech:', error);
@@ -663,29 +664,44 @@ async function handleWebPageConversion(chunks, totalChunks) {
     messageDiv = document.getElementById("message");
   }
   
-  if (messageDiv) {
-    messageDiv.textContent = `Converting page: 0/${totalChunks} chunks`;
-  }
+  // if (messageDiv) {
+  //   messageDiv.textContent = `Converting page: 0/${totalChunks} chunks`;
+  // }
   
   for (let i = 0; i < chunks.length; i++) {
     try {
       await convertTextToSpeech(chunks[i]);
-      if (messageDiv) {
-        messageDiv.textContent = `Converting page: ${i + 1}/${totalChunks} chunks`;
-      }
+      // if (messageDiv) {
+      //   messageDiv.textContent = `Converting page: ${i + 1}/${totalChunks} chunks`;
+      // }
     } catch (error) {
       console.error(`Error converting chunk ${i}:`, error);
+            if (messageDiv) {
+        messageDiv.textContent = `Error converting chunk ${i + 1}/${totalChunks}, ${error.message || 'Unknown error'}`;
+        setTimeout(() => {
+          if (messageDiv) {
+            messageDiv.textContent = '';
+          }
+        }, 3000);
+      }
       continue;
     }
   }
   
   if (messageDiv) {
     messageDiv.textContent = "Page conversion completed!";
+    messageDiv.className = 'success';
     setTimeout(() => {
       if (messageDiv) {
         messageDiv.textContent = "";
+        messageDiv.className = '';
       }
     }, 3000);
+  }
+
+  // Hide convert button after successful conversion
+  if (convertButton) {
+    convertButton.hidden = true;
   }
 }
 
@@ -909,6 +925,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   urlInput = document.getElementById("pageUrlInput");
   convertPageButton = document.getElementById("convertPageButton");
   openInFloatingWindow = document.getElementById("openInFloatingWindow");
+  refreshButton = document.getElementById("refreshButton");
 
   // Initialize player controls
   const playPauseButton = document.getElementById('playPauseButton');
@@ -973,6 +990,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Initialize refresh button handler
+  if (refreshButton) {
+    refreshButton.addEventListener('click', () => {
+      // Add spinning animation class
+      refreshButton.querySelector('i').classList.add('fa-spin');
+      
+      // Reload the page after a brief delay to show the animation
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
+    });
+  }
+
   // Initialize dark mode
   initializeDarkMode();
   
@@ -986,7 +1016,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (textInput) {
     textInput.addEventListener("input", () => {
       if (convertButton) {
-        convertButton.disabled = !textInput.value.trim();
+        // Show/hide button based on text content
+        convertButton.hidden = !textInput.value.trim();
       }
     });
   }
@@ -1085,6 +1116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           setTimeout(() => {
             convertButton.disabled = false;
             convertButton.textContent = 'Convert to Speech';
+            convertButton.hidden = true;  // Hide the button after conversion
           }, 2000);
 
         } catch (error) {
