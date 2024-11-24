@@ -8,12 +8,17 @@
     "contextMenus",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "notifications"
   ],
   "host_permissions": [
     "https://voice.cloud.atemkeng.de/*",
     "<all_urls>"
   ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "web_accessible_resources": [{
     "resources": [
       "popup.html",
@@ -47,11 +52,9 @@
     {
       "matches": ["<all_urls>"],
       "css": ["highlight.css", "mini-player.css"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "run_at": "document_end",
+      "all_frames": false
     }
-  ],
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  }
+  ]
 }

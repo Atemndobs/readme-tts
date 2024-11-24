@@ -3,19 +3,38 @@ let floatingWindowId = null;
 let floatingTabId = null;
 let injectedTabs = new Set();
 
-// Initialize extension
-chrome.runtime.onInstalled.addListener(() => {
-  // Clear any existing state
-  chrome.storage.local.clear();
-  injectedTabs.clear();
+// Maximum number of retries for operations
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+// Store blob URLs and their associated tabs
+const blobUrls = new Map();
+
+// Service worker activation
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    console.log('Extension installed/updated');
+    // Clear any existing state
+    await chrome.storage.local.clear();
+    injectedTabs.clear();
+    
+    // Create context menu
+    await chrome.contextMenus.create({
+      id: 'convertTextToSpeech',
+      title: 'raadMe - Read this text',
+      contexts: ['selection']
+    });
+  } catch (error) {
+    console.error('Error initializing extension:', error);
+  }
 });
 
-// Clean up when extension is updated or reloaded
-chrome.runtime.onSuspend.addListener(() => {
-  injectedTabs.clear();
-  if (floatingWindowId) {
-    chrome.windows.remove(floatingWindowId);
-  }
+// Keep service worker alive
+chrome.runtime.onConnect.addListener(port => {
+  console.log('Port connected:', port.name);
+  port.onDisconnect.addListener(() => {
+    console.log('Port disconnected:', port.name);
+  });
 });
 
 // Function to check if URL should be injected
@@ -34,29 +53,108 @@ function shouldInjectContentScript(url) {
   return url && !restrictedPatterns.some(pattern => url.startsWith(pattern));
 }
 
-// Function to handle tab updates
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url) {
+// Function to check if extension context is valid
+function isExtensionContextValid() {
+  try {
+    return typeof chrome !== 'undefined' && 
+           chrome?.runtime?.id !== undefined && 
+           chrome.runtime.getManifest() !== undefined;
+  } catch (e) {
+    console.warn('Extension context check failed:', e);
+    return false;
+  }
+}
+
+// Function to wait
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Function to retry an operation with exponential backoff
+async function retryOperation(operation, maxRetries = MAX_RETRIES) {
+  let lastError;
+  let delay = RETRY_DELAY;
+
+  for (let i = 0; i < maxRetries; i++) {
     try {
-      // Always enable the extension icon
-      await chrome.action.enable(tabId);
-      
-      // Only inject content script for valid URLs
-      if (shouldInjectContentScript(tab.url) && !injectedTabs.has(tabId)) {
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['content.js']
-        });
-        injectedTabs.add(tabId);
+      if (!isExtensionContextValid()) {
+        await wait(100); // Short wait to check context again
+        if (!isExtensionContextValid()) {
+          throw new Error('Extension context invalidated');
+        }
       }
+      return await operation();
     } catch (error) {
-      console.error('Error handling tab update:', error);
+      lastError = error;
+      console.warn(`Attempt ${i + 1}/${maxRetries} failed:`, error.message);
+      
+      if (error.message.includes('Extension context invalidated')) {
+        await wait(delay);
+        delay *= 2; // Exponential backoff
+      } else {
+        throw error;
+      }
     }
   }
-});
+  throw lastError;
+}
+
+// Function to handle tab updates with retry
+async function handleTabUpdate(tabId, changeInfo, tab) {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid during tab update');
+    return;
+  }
+  
+  if (changeInfo.status === 'complete' && tab.url) {
+    try {
+      await retryOperation(async () => {
+        // Check context before each operation
+        if (!isExtensionContextValid()) throw new Error('Extension context invalidated');
+        
+        // Enable the extension icon
+        await chrome.action.enable(tabId);
+        
+        // Only inject content script for valid URLs
+        if (shouldInjectContentScript(tab.url) && !injectedTabs.has(tabId)) {
+          console.log('Injecting content script into tab:', tabId);
+          
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tabId },
+              files: ['content.js']
+            });
+            injectedTabs.add(tabId);
+            console.log('Content script injected successfully into tab:', tabId);
+            
+            // Verify content script is responsive
+            const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+            if (response?.success) {
+              console.log('Content script verified in tab:', tabId);
+            } else {
+              throw new Error('Content script not responsive');
+            }
+          } catch (error) {
+            console.error('Error injecting content script:', error);
+            injectedTabs.delete(tabId);
+            throw error;
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error handling tab update:', error);
+      // Remove from injected tabs if injection failed
+      injectedTabs.delete(tabId);
+    }
+  }
+}
+
+// Update event listeners to use retry mechanism
+chrome.tabs.onUpdated.addListener(handleTabUpdate);
 
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
+  revokeBlobUrlsForTab(tabId);
   injectedTabs.delete(tabId);
   if (tabId === floatingTabId) {
     floatingTabId = null;
@@ -66,10 +164,17 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid, rejecting message:', request.action);
+    sendResponse({ success: false, error: 'Extension context invalidated' });
+    return true;
+  }
+
   if (request.action === 'pageInteraction') {
     // Enable the extension icon when user interacts with the page
     chrome.action.enable(sender.tab.id);
   }
+  return true;
 });
 
 // Function to extract readable text from webpage
@@ -78,139 +183,100 @@ function extractReadableText() {
   return content.replace(/\s+/g, ' ').trim();
 }
 
-// Function to chunk text
-function chunkText(text, chunkSize = 1000) {
-  const words = text.split(' ');
-  const chunks = [];
-  let currentChunk = [];
-  let currentSize = 0;
-
-  for (const word of words) {
-    if (currentSize + word.length > chunkSize) {
-      chunks.push(currentChunk.join(' '));
-      currentChunk = [word];
-      currentSize = word.length;
-    } else {
-      currentChunk.push(word);
-      currentSize += word.length + 1; // +1 for space
+// Function to revoke blob URLs for a tab
+function revokeBlobUrlsForTab(tabId) {
+  if (blobUrls.has(tabId)) {
+    const urls = blobUrls.get(tabId);
+    for (const url of urls) {
+      try {
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Error revoking blob URL:', error);
+      }
     }
-  }
-
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(' '));
-  }
-
-  return chunks;
-}
-
-// Function to split text into paragraphs
-function splitIntoParagraphs(text) {
-  // Split by common paragraph separators
-  const rawParagraphs = text.split(/(?:\r?\n\r?\n|\r\r)/);
-  
-  return rawParagraphs
-    .map(p => p.trim())
-    .filter(p => p.length > 0 && p.split(/\s+/).length > 3) // Filter out empty and very short paragraphs
-    .map(p => p.replace(/\s+/g, ' ')); // Normalize whitespace
-}
-
-// Function to convert text to speech
-async function convertTextToSpeech(text) {
-  try {
-    const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text: text,
-        voice: 'nova',
-        model: 'en-us-x-tts',
-        speed: 1.0
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to convert text to speech');
-    }
-
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
-  } catch (error) {
-    console.error('TTS conversion error:', error);
-    throw error;
+    blobUrls.delete(tabId);
   }
 }
 
-// Function to inject content script
-async function ensureContentScriptInjected(tabId) {
-  try {
-    // Check if the content script is already injected
-    await chrome.tabs.sendMessage(tabId, { action: 'ping' });
-  } catch (error) {
-    // If we get an error, the content script is not injected yet
-    await chrome.scripting.insertCSS({
-      target: { tabId },
-      files: ['highlight.css', 'mini-player.css']
-    });
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content.js']
-    });
-  }
-}
-
-// Listen for tab updates to inject content script
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && shouldInjectContentScript(tab.url)) {
-    ensureContentScriptInjected(tabId);
-  }
-});
-
-// Handle text selection from content script
+// Handle messages with retry and proper cleanup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'convertSelection') {
-    convertTextToSpeech(request.text)
-      .then(audioUrl => {
-        sendResponse({ success: true, audioUrl });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid, rejecting message:', request.action);
+    sendResponse({ success: false, error: 'Extension context invalidated' });
     return true;
   }
+
+  const tabId = sender.tab?.id;
+  if (!tabId) {
+    sendResponse({ success: false, error: 'Invalid tab ID' });
+    return true;
+  }
+
+  if (request.action === 'convertTextToSpeech') {
+    (async () => {
+      try {
+        // Clean up previous blob URLs for this tab
+        revokeBlobUrlsForTab(tabId);
+        
+        // Convert text to speech with retry
+        const audioUrl = await retryOperation(async () => {
+          return await convertTextToSpeech(request.text, tabId);
+        });
+        
+        sendResponse({ success: true, audioUrl });
+      } catch (error) {
+        console.error('Error in text-to-speech conversion:', error);
+        sendResponse({ 
+          success: false, 
+          error: error.message || 'Failed to convert text to speech'
+        });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'contentScriptReady') {
+    // Content script is ready, we can now enable features for this tab
+    if (sender.tab?.id) {
+      chrome.action.enable(sender.tab.id);
+    }
+    return true;
+  }
+  return true;
 });
 
-// Create context menu items
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'convertTextToSpeech',
-    title: 'Convert to Speech',
-    contexts: ['selection']
-  });
-});
-
-// Handle context menu clicks
+// Handle context menu clicks with proper cleanup
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'convertTextToSpeech' && tab?.id) {
     try {
-      const audioUrl = await convertTextToSpeech(info.selectionText);
+      // Ensure content script is injected
+      if (!injectedTabs.has(tab.id)) {
+        console.log('Content script not injected, attempting injection...');
+        await handleTabUpdate(tab.id, { status: 'complete' }, tab);
+      }
       
-      // Send audio URL to content script
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'playAudio',
-        audioUrl: audioUrl,
-        text: info.selectionText
+      // Clean up previous blob URLs for this tab
+      revokeBlobUrlsForTab(tab.id);
+      
+      // Get formatted selection from content script with retry
+      const response = await retryOperation(async () => {
+        const resp = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
+        if (!resp?.success) {
+          throw new Error(resp?.error || 'Failed to get formatted selection');
+        }
+        return resp;
       });
+
+      // Open floating window with selected text
+      await createFloatingWindow(response.text);
     } catch (error) {
       console.error('Error processing text to speech:', error);
       // Show error notification
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'images/icon128.png',
+        iconUrl: 'icon/icons8-voice-recognition-128.png',
         title: 'Text-to-Speech Error',
-        message: error.message || 'Failed to convert text to speech'
+        message: error.message || 'Failed to process text to speech'
       });
     }
   }
@@ -224,6 +290,7 @@ chrome.windows.onCreated.addListener(async (window) => {
     const tabs = await chrome.tabs.query({ windowId: window.id });
     if (tabs.length > 0) {
       floatingTabId = tabs[0].id;
+      console.log('Floating window created with tab ID:', floatingTabId);
     }
   }
 });
@@ -236,36 +303,14 @@ chrome.windows.onRemoved.addListener((windowId) => {
   }
 });
 
-// Function to create floating window
-async function createFloatingWindow() {
-  const width = 500;
-  const height = 600;
-  
-  // Get the current window to calculate the center position
-  const currentWindow = await chrome.windows.getCurrent();
-  const left = Math.round(currentWindow.left + (currentWindow.width - width) / 2);
-  const top = Math.round(currentWindow.top + (currentWindow.height - height) / 2);
-  
-  const window = await chrome.windows.create({
-    url: chrome.runtime.getURL("popup.html"),
-    type: "popup",
-    width: width,
-    height: height,
-    left: left,
-    top: top
-  });
-  
-  floatingWindowId = window.id;
-  const tabs = await chrome.tabs.query({ windowId: window.id });
-  if (tabs.length > 0) {
-    floatingTabId = tabs[0].id;
-  }
-  return window;
-}
-
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background received message:', message);
+  if (message.action === "createFloatingWindow") {
+    createFloatingWindow(message.selectedText || "")
+      .catch(error => console.error('Error creating floating window:', error));
+    return true;
+  }
   if (message.action === 'chunkText' && message.text) {
     try {
       console.log('Chunking text of length:', message.text.length);
@@ -281,3 +326,68 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Must return true if response is sent asynchronously
   return true;
 });
+
+// Function to create floating window
+async function createFloatingWindow(selectedText = '') {
+  try {
+    // If there's already a window open, focus it and update the text
+    if (floatingWindowId !== null) {
+      try {
+        const existingWindow = await chrome.windows.get(floatingWindowId);
+        // Update the selected text
+        await chrome.storage.local.set({ 
+          selectedText,
+          autoConvert: true
+        });
+        // Focus the existing window
+        await chrome.windows.update(floatingWindowId, { focused: true });
+        // Send message to the popup tab to update the text and convert
+        if (floatingTabId !== null) {
+          await chrome.tabs.sendMessage(floatingTabId, {
+            action: "newTextSelected",
+            text: selectedText
+          });
+        }
+        return existingWindow;
+      } catch (error) {
+        // If window not found, reset the ID and continue to create new window
+        floatingWindowId = null;
+        floatingTabId = null;
+      }
+    }
+
+    const width = 480;
+    const height = 580;
+    
+    // Position at top left of screen
+    const left = 20; // 20px padding from left edge of screen
+    const top = 20;  // 20px padding from top edge of screen
+    
+    // Store the selected text before creating the window
+    await chrome.storage.local.set({ 
+      selectedText,
+      autoConvert: true
+    });
+    
+    const window = await chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html?floating=true"),
+      type: "popup",
+      width: width,
+      height: height,
+      left: left,
+      top: top,
+      focused: true,
+      state: "normal"
+    });
+
+    floatingWindowId = window.id;
+    const tabs = await chrome.tabs.query({ windowId: window.id });
+    if (tabs.length > 0) {
+      floatingTabId = tabs[0].id;
+    }
+    return window;
+  } catch (error) {
+    console.error('Error creating floating window:', error);
+    throw error;
+  }
+}

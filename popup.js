@@ -5,6 +5,10 @@ let audioQueue = [];
 let isProcessingQueue = false;
 let savedInputText = null;
 
+// Maximum number of retries for operations
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
 // DOM Elements
 let convertButton;
 let textInput;
@@ -23,7 +27,7 @@ let openInFloatingWindow;
 const modelToVoices = {
   "voice-en-us": [
     "voice-en-us-amy-low",
-    "voice-en-gb-alan-low",
+    "voice-en-us-josh-low",
     "voice-en-us-ryan-low",
     "voice-en-us-kathleen-low"
   ],
@@ -45,22 +49,157 @@ const modelToVoices = {
 };
 
 // Function to populate voices based on selected model
-function populateVoices() {
-  if (!modelSelect || !voiceSelect) return;
+async function populateVoices() {
+  const voiceSelect = document.getElementById('voiceSelect');
+  if (!voiceSelect) return;
+
+  // Clear existing options
+  voiceSelect.innerHTML = '';
   
-  const selectedModel = modelSelect.value;
-  const voices = modelToVoices[selectedModel] || [];
+  // Get the selected model
+  const modelSelect = document.getElementById('modelSelect');
+  const selectedModel = modelSelect?.value || 'voice-en-us';
+  
+  // Define voices for each model
+  const voices = {
+    'voice-en-us': [
+      { id: 'voice-en-us-amy-low', name: 'Amy' },
+      { id: 'voice-en-us-josh-low', name: 'Josh' },
+      { id: 'voice-en-us-ryan-low', name: 'Ryan' },
+      { id: 'voice-en-us-kathleen-low', name: 'Kathleen' }
+    ],
+    'voice-de': [
+      { id: 'voice-de-thorsten-low', name: 'Thorsten' },
+      { id: 'voice-de-kerstin-low', name: 'Kerstin' }
+    ],
+    'voice-fr': [
+      { id: 'voice-fr-jean-low', name: 'Jean' },
+      { id: 'voice-fr-marie-low', name: 'Marie' }
+    ],
+    'voice-es': [
+      { id: 'voice-es-pedro-low', name: 'Pedro' },
+      { id: 'voice-es-lucia-low', name: 'Lucia' }
+    ],
+    'voice-it': [
+      { id: 'voice-it-marco-low', name: 'Marco' },
+      { id: 'voice-it-sofia-low', name: 'Sofia' }
+    ]
+  };
 
-  // Clear previous options
-  voiceSelect.innerHTML = "";
-
-  // Populate the voice dropdown
-  voices.forEach(voice => {
-    const option = document.createElement("option");
-    option.value = voice;
-    option.textContent = voice.replace(/-/g, " ");
+  // Add voices for selected model
+  const modelVoices = voices[selectedModel] || [];
+  modelVoices.forEach(voice => {
+    const option = document.createElement('option');
+    option.value = voice.id;
+    option.textContent = voice.name;
     voiceSelect.appendChild(option);
   });
+
+  // Load persisted settings
+  const settings = await loadSettings();
+  
+  // If we have a persisted voice for this model, select it
+  if (settings.voice && modelVoices.some(v => v.id === settings.voice)) {
+    voiceSelect.value = settings.voice;
+  } else {
+    // Otherwise use the first voice as default and save it
+    const firstVoice = modelVoices[0]?.id;
+    if (firstVoice) {
+      voiceSelect.value = firstVoice;
+      settings.voice = firstVoice;
+      await saveSettings(settings);
+    }
+  }
+}
+
+// Update the language select options
+function updateLanguageOptions() {
+  const modelSelect = document.getElementById('modelSelect');
+  if (!modelSelect) return;
+
+  // Clear existing options
+  modelSelect.innerHTML = '';
+
+  // Define languages with their display names
+  const languages = [
+    { id: 'voice-en-us', name: 'English (EN)' },
+    { id: 'voice-de', name: 'German (DE)' },
+    { id: 'voice-fr', name: 'French (FR)' },
+    { id: 'voice-es', name: 'Spanish (ES)' },
+    { id: 'voice-it', name: 'Italian (IT)' }
+  ];
+
+  // Add language options
+  languages.forEach(lang => {
+    const option = document.createElement('option');
+    option.value = lang.id;
+    option.textContent = lang.name;
+    modelSelect.appendChild(option);
+  });
+}
+
+// Function to update voice options based on selected model
+async function updateVoiceOptions(model) {
+  const voiceSelect = document.getElementById('voiceSelect');
+  if (!voiceSelect) return;
+
+  console.log('Updating voice options for model:', model);
+
+  // Clear existing options
+  voiceSelect.innerHTML = '';
+
+  // Get voices for selected model
+  const voices = {
+    'voice-en-us': [
+      { id: 'voice-en-us-amy-low', name: 'Amy' },
+      { id: 'voice-en-us-josh-low', name: 'Josh' },
+      { id: 'voice-en-us-ryan-low', name: 'Ryan' },
+      { id: 'voice-en-us-kathleen-low', name: 'Kathleen' }
+    ],
+    'voice-de': [
+      { id: 'voice-de-thorsten-low', name: 'Thorsten' },
+      { id: 'voice-de-kerstin-low', name: 'Kerstin' }
+    ],
+    'voice-fr': [
+      { id: 'voice-fr-jean-low', name: 'Jean' },
+      { id: 'voice-fr-marie-low', name: 'Marie' }
+    ],
+    'voice-es': [
+      { id: 'voice-es-pedro-low', name: 'Pedro' },
+      { id: 'voice-es-lucia-low', name: 'Lucia' }
+    ],
+    'voice-it': [
+      { id: 'voice-it-marco-low', name: 'Marco' },
+      { id: 'voice-it-sofia-low', name: 'Sofia' }
+    ]
+  };
+
+  // Add options for each voice
+  const modelVoices = voices[model] || voices['voice-en-us'];
+  modelVoices.forEach(voice => {
+    const option = document.createElement('option');
+    option.value = voice.id;
+    option.textContent = voice.name;
+    voiceSelect.appendChild(option);
+  });
+
+  // Load current settings
+  const settings = loadSettings();
+  
+  // If we have a voice for this model, use it
+  const voiceForModel = modelVoices.find(v => v.id === settings.voice);
+  if (voiceForModel) {
+    voiceSelect.value = voiceForModel.id;
+  } else {
+    // Otherwise use first voice
+    voiceSelect.value = modelVoices[0].id;
+  }
+
+  // Save the updated settings
+  settings.model = model;
+  settings.voice = voiceSelect.value;
+  saveSettings(settings);
+  console.log('Saved settings after voice update:', settings);
 }
 
 // Function to initialize dark mode
@@ -81,27 +220,67 @@ function initializeDarkMode() {
   });
 }
 
+// Function to check if extension context is valid
+function isExtensionContextValid() {
+  return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+}
+
+// Function to wait
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Function to retry an operation
+async function retryOperation(operation, maxRetries = MAX_RETRIES) {
+  let lastError;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (!isExtensionContextValid()) {
+        throw new Error('Extension context invalidated');
+      }
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (error.message.includes('Extension context invalidated')) {
+        console.log(`Attempt ${i + 1}/${maxRetries} failed due to invalid context, retrying...`);
+        await wait(RETRY_DELAY);
+      } else {
+        throw error; // If it's not a context error, throw immediately
+      }
+    }
+  }
+  throw lastError;
+}
+
 // Function to check text selection
 async function checkTextSelection() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return false;
-    
-    // Check for restricted URLs
-    const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
-    if (restrictedUrls.some(url => tab.url.startsWith(url))) {
-      console.log('Cannot access restricted URL:', tab.url);
-      return false;
-    }
+    return await retryOperation(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return false;
+      
+      // Check for restricted URLs
+      const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
+      if (tab.url && restrictedUrls.some(url => tab.url.startsWith(url))) {
+        console.log('Cannot access restricted URL:', tab.url);
+        return false;
+      }
 
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: () => window.getSelection().toString().trim()
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.getSelection().toString().trim()
+      });
+
+      return result.length > 0;
     });
-
-    return result.length > 0;
   } catch (error) {
     console.error('Error checking text selection:', error);
+    if (error.message.includes('Extension context invalidated')) {
+      if (selectionStatus) {
+        selectionStatus.textContent = 'Extension reloaded. Please refresh the page.';
+        selectionStatus.classList.add('text-red-500');
+      }
+    }
     return false;
   }
 }
@@ -109,62 +288,73 @@ async function checkTextSelection() {
 // Function to get selected text
 async function getSelectedText() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return '';
-    
-    // Check for restricted URLs
-    const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
-    if (restrictedUrls.some(url => tab.url.startsWith(url))) {
-      console.log('Cannot access restricted URL:', tab.url);
-      return '';
-    }
+    return await retryOperation(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return '';
+      
+      // Check for restricted URLs
+      const restrictedUrls = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'edge://', 'about:blank'];
+      if (tab.url && restrictedUrls.some(url => tab.url.startsWith(url))) {
+        console.log('Cannot access restricted URL:', tab.url);
+        return '';
+      }
 
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: () => window.getSelection().toString().trim()
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.getSelection().toString().trim()
+      });
+
+      return result;
     });
-
-    return result;
   } catch (error) {
     console.error('Error getting selected text:', error);
+    if (error.message.includes('Extension context invalidated')) {
+      if (messageDiv) {
+        messageDiv.textContent = 'Extension reloaded. Please refresh the page.';
+        messageDiv.classList.add('text-red-500');
+      }
+    }
     return '';
   }
 }
 
 // Function to convert text to speech
 async function convertTextToSpeech(text) {
-  // Validate input text
-  if (!text || typeof text !== 'string' || !text.trim()) {
-    throw new Error('Please enter valid text to convert');
-  }
-
-  // Get selected voice and model
-  const selectedModel = modelSelect?.value || 'voice-en-us-amy-low';
-  const selectedVoice = voiceSelect?.value || 'voice-en-us-amy-low';
+  if (!text.trim()) return;
   
-  // Validate that the voice is available for the selected model
-  const availableVoices = modelToVoices[selectedModel] || [];
-  if (!availableVoices.includes(selectedVoice)) {
-    throw new Error('Selected voice is not available for this model');
-  }
+  const settings = loadSettings();
   
   try {
+    if (!chrome.runtime?.id) {
+      throw new Error('Extension context invalid');
+    }
+
+    if (messageDiv) {
+      messageDiv.textContent = 'Converting text to speech...';
+    }
+
+    console.log('Making API request with:', {
+      input: text,
+      model: settings.voice,
+      voice: settings.voice
+    });
+
     const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: selectedVoice,
-        input: text.trim(),
-        voice: selectedVoice
+        input: text,
+        model: settings.voice,
+        voice: settings.voice
       })
     });
 
     if (!response.ok) {
       const errorData = await response.text();
       console.error('API Error:', errorData);
-      throw new Error(`Server error: ${response.status}`);
+      throw new Error(`Server error: ${response.status} - ${errorData}`);
     }
 
     const blob = await response.blob();
@@ -172,24 +362,106 @@ async function convertTextToSpeech(text) {
       throw new Error('Received empty audio data');
     }
 
+    console.log('Received audio blob:', blob);
+
     const audioUrl = URL.createObjectURL(blob);
-    
-    // Create and add audio entry
-    const { element, audio, text: audioText } = createAudioEntry(text, audioUrl);
-    const audioContainer = document.getElementById('audioContainer');
-    if (audioContainer) {
-      audioContainer.prepend(element);
-      addToAudioQueue({ element, audio, text: audioText });
+    console.log('Created audio URL:', audioUrl);
+
+    // Create audio entry and add to queue
+    const audioEntry = createAudioEntry(text, audioUrl);
+    addToAudioQueue(audioEntry);
+
+    if (messageDiv) {
+      messageDiv.textContent = 'Audio ready to play';
+      setTimeout(() => {
+        messageDiv.textContent = '';
+      }, 2000);
     }
-    
+
   } catch (error) {
     console.error('Error converting text to speech:', error);
-    if (selectionStatus) {
-      selectionStatus.textContent = 'Error converting text to speech';
-      selectionStatus.classList.add('text-red-500');
+    if (messageDiv) {
+      messageDiv.textContent = `Error: ${error.message}`;
+      setTimeout(() => {
+        messageDiv.textContent = '';
+      }, 5000);
     }
-    throw error; // Re-throw to handle in the calling function
+    throw error;
   }
+}
+
+// Function to create audio entry
+function createAudioEntry(text, audioUrl) {
+  const audio = new Audio(audioUrl);
+  
+  // Set up audio event listeners
+  audio.addEventListener('loadedmetadata', () => {
+    console.log('Audio metadata loaded:', {
+      duration: audio.duration,
+      readyState: audio.readyState
+    });
+    
+    // Validate duration before updating UI
+    if (!isNaN(audio.duration) && isFinite(audio.duration)) {
+      updatePlayerUI({ audio, text });
+    } else {
+      console.warn('Invalid duration after metadata load:', audio.duration);
+    }
+  });
+
+  // Handle play/pause events
+  audio.addEventListener('play', () => {
+    console.log('Audio playing');
+    updatePlayerUI({ audio, text });
+  });
+
+  audio.addEventListener('pause', () => {
+    console.log('Audio paused');
+    updatePlayerUI({ audio, text });
+  });
+
+  // Handle errors
+  audio.addEventListener('error', (e) => {
+    console.error('Audio error:', e.target.error);
+    if (messageDiv) {
+      messageDiv.textContent = 'Error playing audio. Please try again.';
+    }
+  });
+
+  // Handle audio loading
+  audio.addEventListener('canplay', () => {
+    console.log('Audio can play');
+    updatePlayerUI({ audio, text });
+  });
+
+  // Handle audio ended
+  audio.addEventListener('ended', () => {
+    console.log('Audio ended, checking for next audio');
+    const currentIndex = audioQueue.findIndex(entry => entry.audio === audio);
+    if (currentIndex < audioQueue.length - 1) {
+      // Play next audio
+      const nextEntry = audioQueue[currentIndex + 1];
+      currentAudio = nextEntry.audio;
+      currentAudio.play().catch(error => {
+        console.error('Error playing next audio:', error);
+        if (messageDiv) {
+          messageDiv.textContent = 'Error playing next audio. Please try again.';
+          setTimeout(() => messageDiv.textContent = '', 3000);
+        }
+      });
+      updatePlayerUI(nextEntry);
+    } else {
+      console.log('No more audio in queue');
+      // Reset play button when playlist ends
+      const playIcon = document.querySelector('#playPauseButton i');
+      if (playIcon) {
+        playIcon.className = 'fa-solid fa-play';
+      }
+      currentAudio = null;
+    }
+  });
+
+  return { audio, text };
 }
 
 // Function to process audio queue
@@ -200,9 +472,15 @@ async function processAudioQueue() {
   const currentEntry = audioQueue[0];
   
   try {
+    console.log('Processing audio queue:', {
+      queueLength: audioQueue.length,
+      currentAudio: currentEntry?.audio?.src
+    });
+
     // Stop any currently playing audio
     if (currentAudio && currentAudio !== currentEntry.audio) {
       currentAudio.pause();
+      currentAudio.currentTime = 0;
       currentAudio = null;
     }
     
@@ -210,6 +488,7 @@ async function processAudioQueue() {
     
     // Set up the ended event handler
     const onEnded = () => {
+      console.log('Audio ended, processing next in queue');
       audioQueue.shift(); // Remove the finished audio
       isProcessingQueue = false;
       currentEntry.audio.removeEventListener('ended', onEnded);
@@ -217,7 +496,12 @@ async function processAudioQueue() {
     };
     
     currentEntry.audio.addEventListener('ended', onEnded);
-    await currentEntry.audio.play();
+    
+    console.log('Playing audio:', currentEntry.audio.src);
+    await currentEntry.audio.play().catch(error => {
+      console.error('Error playing audio:', error);
+      throw error;
+    });
     
     // Update UI
     updatePlayerUI(currentEntry);
@@ -250,7 +534,7 @@ function updatePlayerUI(audioEntry) {
   const totalChunksDisplay = document.getElementById('totalChunks');
   const currentAudioTextDisplay = document.getElementById('currentAudioText');
 
-  // Always update total chunks
+  // Update total chunks immediately
   if (totalChunksDisplay) {
     totalChunksDisplay.textContent = audioQueue.length.toString();
   }
@@ -268,10 +552,7 @@ function updatePlayerUI(audioEntry) {
     if (durationDisplay) durationDisplay.textContent = '0:00';
     if (currentChunkDisplay) currentChunkDisplay.textContent = '0';
     if (currentAudioTextDisplay) currentAudioTextDisplay.textContent = '';
-    // Clear input field when nothing is playing
-    if (textInput) {
-      textInput.value = '';
-    }
+    if (textInput) textInput.value = '';
     return;
   }
 
@@ -285,24 +566,49 @@ function updatePlayerUI(audioEntry) {
     playButton.classList.toggle('playing', !audio.paused);
   }
 
-  // Update progress ring
-  if (progressRing && !isNaN(audio.duration)) {
-    const progress = audio.currentTime / audio.duration;
-    const circumference = 163.36; // 2 * π * radius (26)
-    const offset = circumference - (progress * circumference);
-    progressRing.style.strokeDashoffset = offset;
+  // Update progress ring and time displays
+  const updateProgress = () => {
+    // Skip if audio isn't ready
+    if (!audio.readyState) {
+      console.log('Audio not ready yet');
+      return;
+    }
+
+    // Ensure we have valid duration
+    if (isNaN(audio.duration) || !isFinite(audio.duration)) {
+      console.warn('Invalid audio duration:', audio.duration);
+      return;
+    }
+
+    // Update progress ring
+    if (progressRing) {
+      const progress = (audio.currentTime / audio.duration) || 0;
+      const circumference = 163.36;
+      const offset = circumference - (progress * circumference);
+      progressRing.style.strokeDashoffset = offset;
+    }
+
+    // Update time displays with validation
+    if (currentTimeDisplay && !isNaN(audio.currentTime)) {
+      currentTimeDisplay.textContent = formatTime(Math.max(0, audio.currentTime));
+    }
+    if (durationDisplay && !isNaN(audio.duration)) {
+      durationDisplay.textContent = formatTime(Math.max(0, audio.duration));
+    }
+  };
+
+  // Add timeupdate listener for continuous progress updates
+  audio.removeEventListener('timeupdate', updateProgress); // Remove any existing listener
+  audio.addEventListener('timeupdate', updateProgress);
+  audio.addEventListener('durationchange', updateProgress); // Add listener for when duration becomes available
+  
+  // Initial progress update if audio is ready
+  if (audio.readyState) {
+    updateProgress();
   }
 
-  // Update time displays
-  if (currentTimeDisplay && !isNaN(audio.currentTime)) {
-    currentTimeDisplay.textContent = formatTime(audio.currentTime);
-  }
-  if (durationDisplay && !isNaN(audio.duration)) {
-    durationDisplay.textContent = formatTime(audio.duration);
-  }
-
-  // Update chunk information - show currently playing chunk
-  const currentIndex = audioQueue.findIndex(entry => entry.audio === audio) + 1;
+  // Update chunk information
+  const currentIndex = audioQueue.findIndex(entry => entry === audioEntry) + 1;
   if (currentChunkDisplay) {
     currentChunkDisplay.textContent = currentIndex.toString();
   }
@@ -318,106 +624,17 @@ function updatePlayerUI(audioEntry) {
   if (textInput && !audio.paused) {
     textInput.value = text;
   }
-}
 
-// Function to create audio entry with improved UI elements
-function createAudioEntry(text, audioUrl) {
-  const audio = new Audio(audioUrl);
-  
-  // Create container element
-  const element = document.createElement('div');
-  element.className = 'audio-entry';
-  
-  // Create text preview
-  const textPreview = document.createElement('div');
-  textPreview.className = 'text-preview';
-  textPreview.textContent = text.length > 100 ? text.substring(0, 100) + '...' : text;
-  
-  // Create audio element wrapper
-  const audioWrapper = document.createElement('div');
-  audioWrapper.className = 'audio-wrapper';
-  
-  // Create custom controls
-  const controls = document.createElement('div');
-  controls.className = 'custom-controls';
-  
-  // Create play/pause button
-  const playPauseBtn = document.createElement('button');
-  playPauseBtn.className = 'play-pause-btn';
-  playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
-  
-  // Add click handler for play/pause
-  playPauseBtn.addEventListener('click', () => {
-    if (audio.paused) {
-      // Pause any currently playing audio
-      if (currentAudio && currentAudio !== audio) {
-        currentAudio.pause();
-        // Save the current input text if it's different from the audio text
-        if (textInput && textInput.value !== text) {
-          savedInputText = textInput.value;
-        }
-      }
-      audio.play();
-      currentAudio = audio;
-      // Update input with current chunk text
-      if (textInput) {
-        textInput.value = text;
-      }
-    } else {
-      audio.pause();
-      // Restore saved input text if it exists
-      if (textInput && savedInputText !== null) {
-        textInput.value = savedInputText;
-        savedInputText = null;
-      }
-    }
-    updatePlayerUI({ element, audio, text });
-  });
-  
-  // Add timeupdate listener for progress
-  audio.addEventListener('timeupdate', () => {
-    if (audio === currentAudio) {
-      updatePlayerUI({ element, audio, text });
-    }
-  });
-  
-  // Add ended listener
+  // Clean up timeupdate listener when audio ends
   audio.addEventListener('ended', () => {
-    playPauseBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
-    if (audio === currentAudio) {
-      // Find next audio in queue
-      const currentIndex = audioQueue.findIndex(entry => entry.audio === audio);
-      if (currentIndex < audioQueue.length - 1) {
-        const nextEntry = audioQueue[currentIndex + 1];
-        currentAudio = nextEntry.audio;
-        currentAudio.play();
-        // Update input with next chunk text
-        if (textInput) {
-          textInput.value = nextEntry.text;
-        }
-        updatePlayerUI(nextEntry);
-      } else {
-        currentAudio = null;
-        // Restore saved input text if it exists
-        if (textInput && savedInputText !== null) {
-          textInput.value = savedInputText;
-          savedInputText = null;
-        }
-        updatePlayerUI(null);
-      }
-    }
+    audio.removeEventListener('timeupdate', updateProgress);
   });
-  
-  controls.appendChild(playPauseBtn);
-  audioWrapper.appendChild(controls);
-  element.appendChild(textPreview);
-  element.appendChild(audioWrapper);
-  
-  return { element, audio, text };
 }
 
 // Function to format time
 function formatTime(seconds) {
+  if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+  
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -485,8 +702,181 @@ function updateChunkDisplay(current, total) {
   }
 }
 
-// Initialize popup
+// Function to chunk text while preserving formatting
+function chunkText(text, maxChunkSize = 1000) {
+  // Normalize line endings and remove extra spaces before newlines
+  const normalizedText = text
+    .replace(/\r\n/g, '\n')
+    .replace(/[\t ]+\n/g, '\n');
+
+  // Split into initial segments (paragraphs)
+  const segments = normalizedText.split(/\n\s*\n+/);
+  
+  // Process each segment and detect headings
+  const chunks = [];
+  for (const segment of segments) {
+    const lines = segment.split('\n');
+    let currentParagraph = [];
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // Check if line is a heading/title
+      const isHeading = (
+        /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
+        /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
+        (trimmedLine.length < 100 && !/[.!?:,;]$/.test(trimmedLine) && /^[A-Z]/.test(trimmedLine)) || // Short title-like lines
+        (trimmedLine.toUpperCase() === trimmedLine && trimmedLine.length < 100) // ALL CAPS lines
+      );
+
+      if (isHeading) {
+        // If we have accumulated paragraph text, add it as a chunk
+        if (currentParagraph.length > 0) {
+          chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
+          currentParagraph = [];
+        }
+        // Add heading as its own chunk
+        chunks.push(trimmedLine);
+      } else {
+        currentParagraph.push(trimmedLine);
+      }
+    }
+
+    // Add any remaining paragraph text as a chunk
+    if (currentParagraph.length > 0) {
+      chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
+    }
+  }
+
+  // Filter out empty chunks and ensure minimum length
+  return chunks.filter(chunk => chunk.length > 0);
+}
+
+// Settings management
+const defaultSettings = {
+  voice: 'amy',
+  model: 'voice-en-us-amy-low'
+};
+
+// Load settings from storage
+function loadSettings() {
+  const voice = localStorage.getItem('ttsVoice') || defaultSettings.voice;
+  const model = localStorage.getItem('ttsModel') || defaultSettings.model;
+  return { voice, model };
+}
+
+// Save settings to storage
+function saveSettings(settings) {
+  localStorage.setItem('ttsVoice', settings.voice);
+  localStorage.setItem('ttsModel', settings.model);
+}
+
+// Function to initialize settings
+async function initializeSettings() {
+  const settings = loadSettings();
+  const modelSelect = document.getElementById('modelSelect');
+  
+  if (modelSelect) {
+    // If we have a persisted model, use it
+    if (settings.model) {
+      modelSelect.value = settings.model;
+    } else {
+      // Otherwise use the first model as default and save it
+      const firstModel = modelSelect.options[0]?.value;
+      if (firstModel) {
+        settings.model = firstModel;
+        saveSettings(settings);
+      }
+    }
+  }
+  
+  // Update voice options for the selected model
+  await updateVoiceOptions(settings.model || modelSelect?.value || 'voice-en-us');
+  
+  // Set voice if we have a persisted value
+  const voiceSelect = document.getElementById('voiceSelect');
+  if (voiceSelect && settings.voice) {
+    // Check if the persisted voice is available for current model
+    const voiceExists = Array.from(voiceSelect.options).some(opt => opt.value === settings.voice);
+    if (voiceExists) {
+      voiceSelect.value = settings.voice;
+    } else {
+      // If persisted voice isn't available, use first voice for current model
+      const firstVoice = voiceSelect.options[0]?.value;
+      if (firstVoice) {
+        settings.voice = firstVoice;
+        voiceSelect.value = firstVoice;
+        saveSettings(settings);
+      }
+    }
+  }
+}
+
+// Apply settings to UI
+async function applySettings() {
+  const settings = loadSettings();
+  document.getElementById('modelSelect').value = settings.model;
+  updateVoiceOptions(settings.model);
+  
+  // Wait for voice options to be updated before setting the voice
+  setTimeout(() => {
+    const voiceSelect = document.getElementById('voiceSelect');
+    if (voiceSelect) {
+      voiceSelect.value = settings.voice;
+    }
+  }, 100);
+}
+
+// Settings modal handlers
+document.getElementById('settingsButton').addEventListener('click', () => {
+  // Load current settings
+  const settings = loadSettings();
+  console.log('Settings modal opened with settings:', settings);
+  
+  // Update model select
+  const modelSelect = document.getElementById('modelSelect');
+  if (modelSelect) {
+    modelSelect.value = settings.model;
+  }
+  
+  // Update voice options and select current voice
+  updateVoiceOptions(settings.model);
+  
+  // Show modal
+  document.getElementById('settingsModal').style.display = 'block';
+});
+
+document.getElementById('closeSettings').addEventListener('click', () => {
+  document.getElementById('settingsModal').style.display = 'none';
+});
+
+// Close modal when clicking outside
+document.getElementById('settingsModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('settingsModal')) {
+    document.getElementById('settingsModal').style.display = 'none';
+  }
+});
+
+// Save settings when changed
+document.getElementById('modelSelect').addEventListener('change', (e) => {
+  console.log('Model changed to:', e.target.value);
+  updateVoiceOptions(e.target.value);
+});
+
+document.getElementById('voiceSelect').addEventListener('change', (e) => {
+  console.log('Voice changed to:', e.target.value);
+  const settings = loadSettings();
+  settings.voice = e.target.value;
+  saveSettings(settings);
+});
+
+// Function to initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
+  // Check if this is a floating window
+  const urlParams = new URLSearchParams(window.location.search);
+  const isFloatingWindow = urlParams.get('floating') === 'true';
+
   // Initialize DOM elements
   convertButton = document.getElementById("convertButton");
   textInput = document.getElementById("textInput");
@@ -586,35 +976,57 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (convertButton) {
     convertButton.addEventListener("click", async () => {
       if (textInput?.value) {
-        const text = textInput.value;
+        const input = textInput.value;
         try {
           // Update button to show processing
           convertButton.disabled = true;
           convertButton.textContent = 'Processing text...';
 
-          // Process text directly in chunks
-          const words = text.split(' ');
-          const chunks = [];
-          let currentChunk = [];
-          let currentSize = 0;
-          const chunkSize = 1000;
+          // Split text into paragraphs and headings
+          const normalizedText = input
+            .replace(/\r\n/g, '\n')
+            .replace(/[\t ]+\n/g, '\n');
 
-          for (const word of words) {
-            if (currentSize + word.length > chunkSize) {
-              chunks.push(currentChunk.join(' '));
-              currentChunk = [word];
-              currentSize = word.length;
-            } else {
-              currentChunk.push(word);
-              currentSize += word.length + 1; // +1 for space
+          // Split into initial segments
+          const segments = normalizedText.split(/\n\s*\n+/);
+          
+          // Process each segment and detect headings
+          const chunks = [];
+          for (const segment of segments) {
+            const lines = segment.split('\n');
+            let currentParagraph = [];
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (!trimmedLine) continue;
+
+              // Check if line is a heading/title
+              const isHeading = (
+                /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
+                /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
+                (trimmedLine.length < 100 && !/[.!?:,;]$/.test(trimmedLine) && /^[A-Z]/.test(trimmedLine)) || // Short title-like lines
+                (trimmedLine.toUpperCase() === trimmedLine && trimmedLine.length < 100) // ALL CAPS lines
+              );
+
+              if (isHeading) {
+                if (currentParagraph.length > 0) {
+                  chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
+                  currentParagraph = [];
+                }
+                chunks.push(trimmedLine);
+              } else {
+                currentParagraph.push(trimmedLine);
+              }
+            }
+
+            if (currentParagraph.length > 0) {
+              chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
             }
           }
 
-          if (currentChunk.length > 0) {
-            chunks.push(currentChunk.join(' '));
-          }
+          const finalChunks = chunks.filter(chunk => chunk.length > 0);
 
-          console.log('Created chunks:', chunks.length);
+          console.log('Created chunks:', finalChunks.length);
           
           // Reset audio queue
           audioQueue = [];
@@ -629,13 +1041,22 @@ document.addEventListener('DOMContentLoaded', async () => {
           updatePlayerUI(null);
 
           // Process chunks
-          for (let i = 0; i < chunks.length; i++) {
-            convertButton.textContent = `Converting chunk ${i + 1}/${chunks.length}...`;
+          for (let i = 0; i <finalChunks.length; i++) {
+            const chunk = finalChunks[i];
+            // Detect if this chunk is a heading
+            const isHeading = (
+              /^#{1,6}\s+/.test(chunk) || // Markdown headings
+              /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(chunk) || // Numbered headings
+              (chunk.length < 100 && !/[.!?:,;]$/.test(chunk) && /^[A-Z]/.test(chunk)) || // Short title-like lines
+              (chunk.toUpperCase() === chunk && chunk.length < 100) // ALL CAPS lines
+            );
+
+            convertButton.textContent = `Converting ${isHeading ? 'heading' : 'paragraph'} ${i + 1}/${finalChunks.length}...`;
             try {
-              await convertTextToSpeech(chunks[i]);
+              await convertTextToSpeech(finalChunks[i]);
             } catch (error) {
-              console.error(`Error converting chunk ${i + 1}:`, error);
-              convertButton.textContent = `Error in chunk ${i + 1}: ${error.message}`;
+              console.error(`Error converting ${isHeading ? 'heading' : 'paragraph'} ${i + 1}:`, error);
+              convertButton.textContent = `Error in ${isHeading ? 'heading' : 'paragraph'} ${i + 1}: ${error.message}`;
               await new Promise(resolve => setTimeout(resolve, 2000)); // Show error for 2 seconds
             }
           }
@@ -676,13 +1097,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check for stored selected text
   chrome.storage.local.get(['selectedText', 'autoConvert'], async function(result) {
     if (result.selectedText && textInput) {
+      // Preserve the original text with formatting
       textInput.value = result.selectedText;
       if (convertButton) {
         convertButton.disabled = false;
       }
       
       if (result.autoConvert) {
-        await convertTextToSpeech(result.selectedText);
+        // Chunk the text while preserving formatting
+        const chunks = chunkText(result.selectedText);
+        console.log('Processing chunks:', chunks.length);
+        
+        // Process each chunk
+        for (let i = 0; i < chunks.length; i++) {
+          updateChunkDisplay(i + 1, chunks.length);
+          await convertTextToSpeech(chunks[i]);
+        }
+        
+        // Reset chunk display
+        updateChunkDisplay(0, 0);
       }
       
       // Clear the stored data
@@ -815,28 +1248,74 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Handle messages from background script
-  const messageListener = (message, sender, sendResponse) => {
-    if (message.action === "newTextSelected" && message.text && textInput) {
-      textInput.value = message.text;
-      if (convertButton) {
-        convertButton.disabled = false;
-      }
-      convertTextToSpeech(message.text);
-    }
-  };
-  chrome.runtime.onMessage.addListener(messageListener);
-
   // Open floating window
   if (openInFloatingWindow) {
-    openInFloatingWindow.addEventListener("click", () => {
-      const width = 480;
-      const height = 780;
-      const left = (window.innerWidth - width) / 2;
-      const top = (window.innerHeight - height) / 2;
-      window.open("popup.html", "PopupWindow", `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`);
+    openInFloatingWindow.addEventListener("click", async () => {
+      // Send message to background script to create floating window
+      await chrome.runtime.sendMessage({ 
+        action: "createFloatingWindow",
+        selectedText: "" // No text selected when opening from icon
+      });
+      // Close the popup
+      window.close();
     });
   }
+
+  // Handle messages from background script
+  const messageListener = async (message, sender, sendResponse) => {
+    try {
+      if (!chrome.runtime?.id) {
+        throw new Error('Extension context invalid');
+      }
+
+      if (isFloatingWindow && message.action === "newTextSelected" && message.text && textInput) {
+        textInput.value = message.text;
+        if (convertButton) {
+          convertButton.disabled = false;
+        }
+        console.log("Original text:", message.text);
+        
+        try {
+          // Chunk the text while preserving formatting
+          const chunks = chunkText(message.text);
+          console.log('Processing chunks:', chunks.length);
+          
+          // Process each chunk
+          for (let i = 0; i < chunks.length; i++) {
+            updateChunkDisplay(i + 1, chunks.length);
+            await convertTextToSpeech(chunks[i]);
+          }
+          
+          // Reset chunk display
+          updateChunkDisplay(0, 0);
+        } catch (error) {
+          console.error('Error processing chunks:', error);
+          if (convertButton) {
+            convertButton.textContent = `Error: ${error.message}`;
+            setTimeout(() => {
+              convertButton.disabled = false;
+              convertButton.textContent = 'Convert to Speech';
+            }, 2000);
+          }
+        }
+      }
+      // Send response to prevent "The message port closed before a response was received" warning
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error('Error in message listener:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    // Return true to indicate we'll send a response asynchronously
+    return true;
+  };
+
+  // Remove existing message listener before adding a new one
+  if (chrome.runtime?.onMessage?.hasListener(messageListener)) {
+    chrome.runtime.onMessage.removeListener(messageListener);
+  }
+
+  // Add message listener
+  chrome.runtime.onMessage.addListener(messageListener);
 
   // Clean up on window unload
   window.addEventListener('unload', () => {
@@ -857,4 +1336,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     audioQueue = [];
     isProcessingQueue = false;
   });
+
+  // Update language options first
+  updateLanguageOptions();
+  
+  // Then initialize settings
+  await initializeSettings();
 });
