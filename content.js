@@ -291,82 +291,59 @@ function createAndPlayAudio(audioUrl) {
 
 // Function to get formatted text from selection
 function getFormattedSelection() {
-  const selection = window.getSelection();
-  if (!selection.rangeCount) return '';
-
-  // Create a temporary div to hold the selection
-  const container = document.createElement('div');
-  const range = selection.getRangeAt(0);
-  
-  // Clone the contents to preserve structure
-  container.appendChild(range.cloneContents());
-  
-  // Replace <div>, <p>, and block elements with double newlines
-  const blockElements = container.querySelectorAll('div, p, h1, h2, h3, h4, h5, h6, li, tr, pre, blockquote');
-  blockElements.forEach(el => {
-    // Don't add extra newlines for nested blocks
-    if (!el.closest('div:not(:first-child), p:not(:first-child)')) {
-      el.insertAdjacentText('beforebegin', '\n\n');
+  try {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
     }
-    // Preserve single newlines within blocks
-    if (el.nextSibling) {
-      el.insertAdjacentText('afterend', '\n');
+
+    // Get the selected text
+    let text = selection.toString().trim();
+    if (!text) {
+      return null;
     }
-  });
 
-  // Replace <br> with newlines
-  const brs = container.getElementsByTagName('br');
-  Array.from(brs).forEach(br => {
-    br.insertAdjacentText('afterend', '\n');
-  });
+    // Normalize whitespace
+    text = text.replace(/[\t ]+/g, ' ')           // Replace tabs and multiple spaces with single space
+              .replace(/[\n\r]+\s*/g, '\n')       // Normalize line endings
+              .replace(/\n{3,}/g, '\n\n')         // Replace multiple newlines with double newline
+              .trim();                            // Remove leading/trailing whitespace
 
-  // Get text content while preserving line breaks
-  let text = container.innerText || container.textContent;
-  
-  // Normalize line breaks
-  text = text
-    .replace(/\r\n/g, '\n') // Normalize Windows line endings
-    .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive line breaks
-    .trim();
-
-  console.log('Formatted selection:', text);
-  return text;
+    return text;
+  } catch (error) {
+    console.error('Error getting selection:', error);
+    return null;
+  }
 }
 
 // Handle messages from the extension with context check
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (!isContextValid) {
     console.warn('Extension context invalid, ignoring message');
-    sendResponse({ success: false, error: 'Extension context invalidated' });
-    return false;  // Don't keep message channel open if context is invalid
+    sendResponse({ success: false, error: 'Extension context invalid' });
+    return true;
   }
 
-  // Handle async operations
   const handleAsync = async () => {
     try {
+      console.log('Content script received message:', request);
+
       switch (request.action) {
-        case 'highlight':
-          await highlightText(request.text);
-          return { success: true };
         case 'ping':
           return { success: true };
-        case 'playAudio':
-          await createAndPlayAudio(request.audioUrl);
-          if (request.text) {
-            await highlightText(request.text);
-          }
-          return { success: true };
+
         case 'getSelection':
-          return { success: true, text: getFormattedSelection() };
+          const selection = getFormattedSelection();
+          if (!selection) {
+            throw new Error('No text selected');
+          }
+          return { success: true, text: selection };
+
         default:
-          return { success: false, error: 'Unknown action' };
+          throw new Error(`Unknown action: ${request.action}`);
       }
     } catch (error) {
-      console.error('Message handling error:', error);
-      cleanup();
-      if (error.message.includes('Extension context invalidated')) {
-        isContextValid = false;
-      }
+      console.error('Error handling message:', error);
       return { success: false, error: error.message };
     }
   };
@@ -374,13 +351,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Execute async operation and send response
   handleAsync().then(response => {
     try {
-      sendResponse(response);
+      if (chrome.runtime?.id) {  // Check if extension context is still valid
+        sendResponse(response);
+      } else {
+        console.warn('Extension context invalid when sending response');
+      }
     } catch (error) {
-      console.warn('Error sending response:', error);
+      console.error('Error sending response:', error);
+    }
+  }).catch(error => {
+    console.error('Error in async operation:', error);
+    try {
+      if (chrome.runtime?.id) {  // Check if extension context is still valid
+        sendResponse({ success: false, error: error.message });
+      }
+    } catch (sendError) {
+      console.error('Error sending error response:', sendError);
     }
   });
 
-  return true;  // Keep message channel open for async response
+  // Return true to indicate we'll send response asynchronously
+  return true;
 });
 
 // Initialize highlight styles

@@ -10,9 +10,10 @@ const RETRY_DELAY = 1000; // 1 second
 // Store blob URLs and their associated tabs
 const blobUrls = new Map();
 
-// Initialize extension
+// Service worker activation
 chrome.runtime.onInstalled.addListener(async () => {
   try {
+    console.log('Extension installed/updated');
     // Clear any existing state
     await chrome.storage.local.clear();
     injectedTabs.clear();
@@ -28,19 +29,12 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-// Clean up when extension is updated or reloaded
-chrome.runtime.onSuspend.addListener(() => {
-  // Clean up all blob URLs
-  for (const [tabId] of blobUrls) {
-    revokeBlobUrlsForTab(tabId);
-  }
-  blobUrls.clear();
-  
-  // Clean up other resources
-  injectedTabs.clear();
-  if (floatingWindowId) {
-    chrome.windows.remove(floatingWindowId);
-  }
+// Keep service worker alive
+chrome.runtime.onConnect.addListener(port => {
+  console.log('Port connected:', port.name);
+  port.onDisconnect.addListener(() => {
+    console.log('Port disconnected:', port.name);
+  });
 });
 
 // Function to check if URL should be injected
@@ -123,14 +117,28 @@ async function handleTabUpdate(tabId, changeInfo, tab) {
         
         // Only inject content script for valid URLs
         if (shouldInjectContentScript(tab.url) && !injectedTabs.has(tabId)) {
-          await chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            files: ['content.js']
-          });
-          injectedTabs.add(tabId);
+          console.log('Injecting content script into tab:', tabId);
           
-          // Verify content script is responsive
-          await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tabId },
+              files: ['content.js']
+            });
+            injectedTabs.add(tabId);
+            console.log('Content script injected successfully into tab:', tabId);
+            
+            // Verify content script is responsive
+            const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+            if (response?.success) {
+              console.log('Content script verified in tab:', tabId);
+            } else {
+              throw new Error('Content script not responsive');
+            }
+          } catch (error) {
+            console.error('Error injecting content script:', error);
+            injectedTabs.delete(tabId);
+            throw error;
+          }
         }
       });
     } catch (error) {
@@ -174,93 +182,6 @@ function extractReadableText() {
   const content = document.body.innerText;
   return content.replace(/\s+/g, ' ').trim();
 }
-
-// // Function to chunk text
-// function chunkText(text, chunkSize = 100) {
-//   const words = text.split(' ');
-//   const chunks = [];
-//   let currentChunk = [];
-//   let currentSize = 0;
-
-//   for (const word of words) {
-//     if (currentSize + word.length > chunkSize) {
-//       chunks.push(currentChunk.join(' '));
-//       currentChunk = [word];
-//       currentSize = word.length;
-//     } else {
-//       currentChunk.push(word);
-//       currentSize += word.length + 1; // +1 for space
-//     }
-//   }
-
-//   if (currentChunk.length > 0) {
-//     chunks.push(currentChunk.join(' '));
-//   }
-
-//   return chunks;
-// }
-
-// // Function to split text into paragraphs
-// function splitIntoParagraphs(text) {
-//   // Split by common paragraph separators
-//   const rawParagraphs = text.split(/(?:\r?\n\r?\n|\r\r)/);
-  
-//   return rawParagraphs
-//     .map(p => p.trim())
-//     .filter(p => p.length > 0 && p.split(/\s+/).length > 3) // Filter out empty and very short paragraphs
-//     .map(p => p.replace(/\s+/g, ' ')); // Normalize whitespace
-// }
-
-// // Function to convert text to speech and create blob URL
-// async function convertTextToSpeech(text, tabId) {
-//   console.log('Converting text to speech:', text);
-  
-//   // Ensure we're in extension context
-//   if (!chrome?.runtime?.id) {
-//     throw new Error('Extension context invalidated');
-//   }
-
-//   try {
-//     const response = await fetch('https://voice.cloud.atemkeng.de/v1/audio/speech', {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json',
-//       },
-//       body: JSON.stringify({
-//         model: 'voice-en-us-amy-low',
-//         input: text.trim(),
-//         voice: 'voice-en-us-amy-low'
-//       })
-//     });
-
-//     if (!response.ok) {
-//       const error = await response.json();
-//       throw new Error(error.error?.message || 'Failed to convert text to speech');
-//     }
-
-//     const arrayBuffer = await response.arrayBuffer();
-//     const blob = new Blob([arrayBuffer], { type: 'audio/mp3' });
-    
-//     // Create blob URL in a try-catch block
-//     try {
-//       const url = window.URL.createObjectURL(blob);
-      
-//       // Store the URL with its tab ID
-//       if (!blobUrls.has(tabId)) {
-//         blobUrls.set(tabId, new Set());
-//       }
-//       blobUrls.get(tabId).add(url);
-      
-//       return url;
-//     } catch (blobError) {
-//       console.error('Error creating blob URL:', blobError);
-//       throw new Error('Failed to create audio URL');
-//     }
-//   } catch (error) {
-//     console.error('TTS conversion error:', error);
-//     throw error;
-//   }
-// }
 
 // Function to revoke blob URLs for a tab
 function revokeBlobUrlsForTab(tabId) {
@@ -324,6 +245,82 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+// Handle context menu clicks with proper cleanup
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'convertTextToSpeech' && tab?.id) {
+    try {
+      // Ensure content script is injected
+      if (!injectedTabs.has(tab.id)) {
+        console.log('Content script not injected, attempting injection...');
+        await handleTabUpdate(tab.id, { status: 'complete' }, tab);
+      }
+      
+      // Clean up previous blob URLs for this tab
+      revokeBlobUrlsForTab(tab.id);
+      
+      // Get formatted selection from content script with retry
+      const response = await retryOperation(async () => {
+        const resp = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
+        if (!resp?.success) {
+          throw new Error(resp?.error || 'Failed to get formatted selection');
+        }
+        return resp;
+      });
+
+      // Open floating window with selected text
+      await createFloatingWindow(response.text);
+    } catch (error) {
+      console.error('Error processing text to speech:', error);
+      // Show error notification
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon/icons8-voice-recognition-128.png',
+        title: 'Text-to-Speech Error',
+        message: error.message || 'Failed to process text to speech'
+      });
+    }
+  }
+});
+
+// Listen for window creation to store floating window ID
+chrome.windows.onCreated.addListener(async (window) => {
+  if (window.type === "popup" && window.url && window.url.includes("popup.html")) {
+    floatingWindowId = window.id;
+    // Get the tab ID from the window
+    const tabs = await chrome.tabs.query({ windowId: window.id });
+    if (tabs.length > 0) {
+      floatingTabId = tabs[0].id;
+      console.log('Floating window created with tab ID:', floatingTabId);
+    }
+  }
+});
+
+// Listen for window removal to clear floating window ID
+chrome.windows.onRemoved.addListener((windowId) => {
+  if (windowId === floatingWindowId) {
+    floatingWindowId = null;
+    floatingTabId = null;
+  }
+});
+
+// Listen for messages from popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Background received message:', message);
+  if (message.action === 'chunkText' && message.text) {
+    try {
+      console.log('Chunking text of length:', message.text.length);
+      const chunks = chunkText(message.text);
+      console.log('Created chunks:', chunks.length);
+      // Send response immediately
+      sendResponse({ success: true, chunks: chunks });
+    } catch (error) {
+      console.error('Error in background script:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+  }
+  // Must return true if response is sent asynchronously
+  return true;
+});
 
 // Function to create floating window
 async function createFloatingWindow(selectedText = '') {
@@ -390,70 +387,3 @@ async function createFloatingWindow(selectedText = '') {
     throw error;
   }
 }
-
-// Handle context menu clicks with proper cleanup
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'convertTextToSpeech' && tab?.id) {
-    try {
-      // Clean up previous blob URLs for this tab
-      revokeBlobUrlsForTab(tab.id);
-      
-      // Get formatted selection from content script
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to get formatted selection');
-      }
-
-      // Open floating window with selected text
-      await createFloatingWindow(response.text);
-    } catch (error) {
-      console.error('Error processing text to speech:', error);
-      // Show error notification
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon/icons8-voice-recognition-128.png',
-        title: 'Text-to-Speech Error',
-        message: error.message || 'Failed to process text to speech'
-      });
-    }
-  }
-});
-
-// Listen for window creation to store floating window ID
-chrome.windows.onCreated.addListener(async (window) => {
-  if (window.type === "popup" && window.url && window.url.includes("popup.html")) {
-    floatingWindowId = window.id;
-    // Get the tab ID from the window
-    const tabs = await chrome.tabs.query({ windowId: window.id });
-    if (tabs.length > 0) {
-      floatingTabId = tabs[0].id;
-    }
-  }
-});
-
-// Listen for window removal to clear floating window ID
-chrome.windows.onRemoved.addListener((windowId) => {
-  if (windowId === floatingWindowId) {
-    floatingWindowId = null;
-    floatingTabId = null;
-  }
-});
-
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Background received message:', message);
-  if (message.action === 'chunkText' && message.text) {
-    try {
-      console.log('Chunking text of length:', message.text.length);
-      const chunks = chunkText(message.text);
-      console.log('Created chunks:', chunks.length);
-      // Send response immediately
-      sendResponse({ success: true, chunks: chunks });
-    } catch (error) {
-      console.error('Error in background script:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-  }
-  // Must return true if response is sent asynchronously
-  return true;
-});
