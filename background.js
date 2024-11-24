@@ -306,6 +306,11 @@ chrome.windows.onRemoved.addListener((windowId) => {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background received message:', message);
+  if (message.action === "createFloatingWindow") {
+    createFloatingWindow(message.selectedText || "")
+      .catch(error => console.error('Error creating floating window:', error));
+    return true;
+  }
   if (message.action === 'chunkText' && message.text) {
     try {
       console.log('Chunking text of length:', message.text.length);
@@ -351,13 +356,12 @@ async function createFloatingWindow(selectedText = '') {
       }
     }
 
-    const width = 500;
-    const height = 700;
+    const width = 480;
+    const height = 580;
     
-    // Get the current window to calculate the top right position
-    const currentWindow = await chrome.windows.getCurrent();
-    const left = currentWindow.left + currentWindow.width - width - 20; // 20px padding from right edge
-    const top = currentWindow.top + 20; // 20px padding from top edge
+    // Position at top left of screen
+    const left = 20; // 20px padding from left edge of screen
+    const top = 20;  // 20px padding from top edge of screen
     
     // Store the selected text before creating the window
     await chrome.storage.local.set({ 

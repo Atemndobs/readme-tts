@@ -568,6 +568,12 @@ function updatePlayerUI(audioEntry) {
 
   // Update progress ring and time displays
   const updateProgress = () => {
+    // Skip if audio isn't ready
+    if (!audio.readyState) {
+      console.log('Audio not ready yet');
+      return;
+    }
+
     // Ensure we have valid duration
     if (isNaN(audio.duration) || !isFinite(audio.duration)) {
       console.warn('Invalid audio duration:', audio.duration);
@@ -583,20 +589,23 @@ function updatePlayerUI(audioEntry) {
     }
 
     // Update time displays with validation
-    if (currentTimeDisplay) {
-      currentTimeDisplay.textContent = formatTime(audio.currentTime);
+    if (currentTimeDisplay && !isNaN(audio.currentTime)) {
+      currentTimeDisplay.textContent = formatTime(Math.max(0, audio.currentTime));
     }
-    if (durationDisplay) {
-      durationDisplay.textContent = formatTime(audio.duration);
+    if (durationDisplay && !isNaN(audio.duration)) {
+      durationDisplay.textContent = formatTime(Math.max(0, audio.duration));
     }
   };
 
   // Add timeupdate listener for continuous progress updates
-  const boundUpdateProgress = updateProgress.bind(this);
-  audio.addEventListener('timeupdate', boundUpdateProgress);
+  audio.removeEventListener('timeupdate', updateProgress); // Remove any existing listener
+  audio.addEventListener('timeupdate', updateProgress);
+  audio.addEventListener('durationchange', updateProgress); // Add listener for when duration becomes available
   
-  // Initial progress update
-  updateProgress();
+  // Initial progress update if audio is ready
+  if (audio.readyState) {
+    updateProgress();
+  }
 
   // Update chunk information
   const currentIndex = audioQueue.findIndex(entry => entry === audioEntry) + 1;
@@ -618,7 +627,7 @@ function updatePlayerUI(audioEntry) {
 
   // Clean up timeupdate listener when audio ends
   audio.addEventListener('ended', () => {
-    audio.removeEventListener('timeupdate', boundUpdateProgress);
+    audio.removeEventListener('timeupdate', updateProgress);
   });
 }
 
@@ -691,6 +700,57 @@ function updateChunkDisplay(current, total) {
   if (totalChunksDisplay) {
     totalChunksDisplay.textContent = total.toString();
   }
+}
+
+// Function to chunk text while preserving formatting
+function chunkText(text, maxChunkSize = 1000) {
+  // Normalize line endings and remove extra spaces before newlines
+  const normalizedText = text
+    .replace(/\r\n/g, '\n')
+    .replace(/[\t ]+\n/g, '\n');
+
+  // Split into initial segments (paragraphs)
+  const segments = normalizedText.split(/\n\s*\n+/);
+  
+  // Process each segment and detect headings
+  const chunks = [];
+  for (const segment of segments) {
+    const lines = segment.split('\n');
+    let currentParagraph = [];
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // Check if line is a heading/title
+      const isHeading = (
+        /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
+        /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
+        (trimmedLine.length < 100 && !/[.!?:,;]$/.test(trimmedLine) && /^[A-Z]/.test(trimmedLine)) || // Short title-like lines
+        (trimmedLine.toUpperCase() === trimmedLine && trimmedLine.length < 100) // ALL CAPS lines
+      );
+
+      if (isHeading) {
+        // If we have accumulated paragraph text, add it as a chunk
+        if (currentParagraph.length > 0) {
+          chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
+          currentParagraph = [];
+        }
+        // Add heading as its own chunk
+        chunks.push(trimmedLine);
+      } else {
+        currentParagraph.push(trimmedLine);
+      }
+    }
+
+    // Add any remaining paragraph text as a chunk
+    if (currentParagraph.length > 0) {
+      chunks.push(currentParagraph.join(' ').replace(/\s+/g, ' ').trim());
+    }
+  }
+
+  // Filter out empty chunks and ensure minimum length
+  return chunks.filter(chunk => chunk.length > 0);
 }
 
 // Settings management
@@ -1037,13 +1097,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check for stored selected text
   chrome.storage.local.get(['selectedText', 'autoConvert'], async function(result) {
     if (result.selectedText && textInput) {
+      // Preserve the original text with formatting
       textInput.value = result.selectedText;
       if (convertButton) {
         convertButton.disabled = false;
       }
       
       if (result.autoConvert) {
-        await convertTextToSpeech(result.selectedText);
+        // Chunk the text while preserving formatting
+        const chunks = chunkText(result.selectedText);
+        console.log('Processing chunks:', chunks.length);
+        
+        // Process each chunk
+        for (let i = 0; i < chunks.length; i++) {
+          updateChunkDisplay(i + 1, chunks.length);
+          await convertTextToSpeech(chunks[i]);
+        }
+        
+        // Reset chunk display
+        updateChunkDisplay(0, 0);
       }
       
       // Clear the stored data
@@ -1176,6 +1248,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Open floating window
+  if (openInFloatingWindow) {
+    openInFloatingWindow.addEventListener("click", async () => {
+      // Send message to background script to create floating window
+      await chrome.runtime.sendMessage({ 
+        action: "createFloatingWindow",
+        selectedText: "" // No text selected when opening from icon
+      });
+      // Close the popup
+      window.close();
+    });
+  }
+
   // Handle messages from background script
   const messageListener = async (message, sender, sendResponse) => {
     try {
@@ -1191,76 +1276,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log("Original text:", message.text);
         
         try {
-          // Split text into paragraphs and headings
-          const normalizedText = message.text
-            .replace(/\r\n/g, '\n')  // Normalize line endings
-            .replace(/[\t ]+\n/g, '\n')  // Remove trailing spaces
-            .replace(/\n{3,}/g, '\n\n'); // Normalize multiple line breaks
-
-          console.log("Normalized text:", normalizedText);
-
-          // Split into initial segments (paragraphs)
-          const segments = normalizedText.split(/\n\s*\n+/);
-          console.log("Initial segments:", segments);
+          // Chunk the text while preserving formatting
+          const chunks = chunkText(message.text);
+          console.log('Processing chunks:', chunks.length);
           
-          // Process each segment and detect headings
-          const chunks = [];
-          for (const segment of segments) {
-            const lines = segment.split('\n');
-            console.log("Processing segment lines:", lines);
-            
-            let currentParagraph = [];
-
-            for (const line of lines) {
-              const trimmedLine = line.trim();
-              if (!trimmedLine) continue;
-
-              // Check if line is a heading/title
-              const isHeading = (
-                /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
-                /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
-                (trimmedLine.length < 100 && 
-                 !/[.!?:,;]$/.test(trimmedLine) && 
-                 /^[A-Z]/.test(trimmedLine) && 
-                 trimmedLine.split(' ').length <= 5) || // Short title-like lines (max 5 words)
-                (trimmedLine.toUpperCase() === trimmedLine && 
-                 trimmedLine.length < 100 && 
-                 !/[.!?:,;]$/.test(trimmedLine)) // ALL CAPS lines without ending punctuation
-              );
-
-              console.log("Line:", trimmedLine, "isHeading:", isHeading);
-
-              if (isHeading) {
-                // If we have accumulated paragraph text, add it as a chunk
-                if (currentParagraph.length > 0) {
-                  const paragraphText = currentParagraph.join(' ').replace(/\s+/g, ' ').trim();
-                  console.log("Adding paragraph chunk:", paragraphText);
-                  chunks.push(paragraphText);
-                  currentParagraph = [];
-                }
-                // Add the heading as its own chunk
-                console.log("Adding heading chunk:", trimmedLine);
-                chunks.push(trimmedLine);
-              } else {
-                currentParagraph.push(trimmedLine);
-              }
-            }
-
-            // Add any remaining paragraph text
-            if (currentParagraph.length > 0) {
-              const paragraphText = currentParagraph.join(' ').replace(/\s+/g, ' ').trim();
-              console.log("Adding final paragraph chunk:", paragraphText);
-              chunks.push(paragraphText);
-            }
+          // Process each chunk
+          for (let i = 0; i < chunks.length; i++) {
+            updateChunkDisplay(i + 1, chunks.length);
+            await convertTextToSpeech(chunks[i]);
           }
-
-          const finalChunks = chunks.filter(chunk => chunk.length > 0);
-          console.log('Final chunks:', finalChunks);
-
-          // Convert each chunk
-          for (const chunk of finalChunks) {
-            await convertTextToSpeech(chunk);
-          }
+          
+          // Reset chunk display
+          updateChunkDisplay(0, 0);
         } catch (error) {
           console.error('Error processing chunks:', error);
           if (convertButton) {
@@ -1289,17 +1316,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Add message listener
   chrome.runtime.onMessage.addListener(messageListener);
-
-  // Open floating window
-  if (openInFloatingWindow) {
-    openInFloatingWindow.addEventListener("click", () => {
-      const width = 480;
-      const height = 780;
-      const left = (window.innerWidth - width) / 2;
-      const top = (window.innerHeight - height) / 2;
-      window.open("popup.html", "PopupWindow", `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`);
-    });
-  }
 
   // Clean up on window unload
   window.addEventListener('unload', () => {
