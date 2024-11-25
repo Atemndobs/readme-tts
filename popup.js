@@ -28,7 +28,7 @@ let refreshButton;
 const modelToVoices = {
   "voice-en-us": [
     "voice-en-us-amy-low",
-    "voice-en-us-josh-low",
+    "voice-en-us-danny-low",
     "voice-en-us-ryan-low",
     "voice-en-us-kathleen-low",
   ],
@@ -60,7 +60,7 @@ async function populateVoices() {
   const voices = {
     "voice-en-us": [
       { id: "voice-en-us-amy-low", name: "Amy" },
-      { id: "voice-en-us-josh-low", name: "Josh" },
+      { id: "voice-en-us-danny-low", name: "Danny" },
       { id: "voice-en-us-ryan-low", name: "Ryan" },
       { id: "voice-en-us-kathleen-low", name: "Kathleen" },
     ],
@@ -148,7 +148,7 @@ async function updateVoiceOptions(model) {
   const voices = {
     "voice-en-us": [
       { id: "voice-en-us-amy-low", name: "Amy" },
-      { id: "voice-en-us-josh-low", name: "Josh" },
+      { id: "voice-en-us-danny-low", name: "Danny" },
       { id: "voice-en-us-ryan-low", name: "Ryan" },
       { id: "voice-en-us-kathleen-low", name: "Kathleen" },
     ],

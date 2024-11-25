@@ -1,94 +1,119 @@
-### **Text-to-Speech Converter Chrome Extension**
+### **ReadMe - Text to Speech Chrome Extension**
 
 #### **Overview**
-The Text-to-Speech Converter is a lightweight and user-friendly Chrome extension that converts written text into high-quality audio. This extension leverages an external API to perform text-to-speech synthesis, supporting multiple languages, voices, and models to cater to diverse user needs. The extension is equipped with features for voice and model selection, dark mode, and customizable playback options, offering a seamless experience for users who want to convert text into speech effortlessly.
+ReadMe is a powerful Chrome extension that converts text to speech with advanced audio management capabilities. It offers a seamless experience for users who want to listen to web content, featuring multi-language support, customizable voices, and an intuitive mini-player interface. The extension uses a secure cloud-based API for high-quality speech synthesis while maintaining robust error handling and context management.
 
 ---
 
 ### **Key Features**
 
 #### **Text-to-Speech Conversion**
-- **Input Text:** Users can input any text into the provided text area.
-- **API Integration:** The extension sends the text to an external API for conversion into speech.
-- **Audio Playback:** Generated audio is played directly within the extension, with controls for playback.
+- **Smart Text Selection:** Convert selected text from any webpage directly to speech
+- **Bulk Text Processing:** Handle large text chunks with automatic splitting and queuing
+- **API Integration:** Secure cloud-based API integration with voice.cloud.atemkeng.de
+- **Audio Queue Management:** Smart queuing system for handling multiple conversion requests
 
 #### **Voice and Model Customization**
-- **Voice Selection:** A dropdown menu lets users choose from a variety of voices (e.g., male, female, or neutral tones).
-- **Model Selection:** Supports multiple language models, such as English (US, GB), German, Catalan, and more, with tailored voices for each model.
+- **Multiple Languages:** Support for English (US/GB), German, French, Spanish, and Italian
+- **Voice Selection:** Multiple voice options per language (e.g., Amy, Alan, Ryan, Kathleen for US English)
+- **Model Quality:** Low and medium quality options for different bandwidth needs
 
-#### **Audio Management**
-- **Multiple Outputs:** The extension supports generating and managing multiple audio outputs simultaneously.
-- **Delete Option:** Users can remove specific audio files using a delete button.
+#### **Advanced Audio Features**
+- **Mini Player:** Floating mini-player with progress tracking and controls
+- **Progress Tracking:** Visual progress indication for audio playback
+- **Queue Management:** Efficient handling of multiple audio requests
+- **Text Highlighting:** Synchronized text highlighting during playback
 
 #### **User Interface**
-- **Dark Mode:** Toggle between light and dark themes for comfortable usage in varying lighting conditions.
-- **Popup Window:** Includes an option to open the interface in a separate, resizable floating window.
-- **Responsive Design:** Works seamlessly within the browser popup.
+- **Dark Mode:** System-aware dark mode with manual toggle option
+- **Floating Window:** Detachable popup window for better usability
+- **Settings Persistence:** Saves user preferences across sessions
+- **Responsive Design:** Adapts to different window sizes and contexts
 
-#### **Error Handling**
-- Displays clear error messages if text input is empty or if the API request fails.
+#### **Security & Performance**
+- **Context Validation:** Continuous monitoring of extension context for security
+- **Error Recovery:** Automatic cleanup and recovery from error states
+- **Secure Communications:** HTTPS-only API communications
+- **Resource Management:** Efficient cleanup of audio resources and UI elements
 
 ---
 
-### **Technical Details**
+### **Technical Implementation**
 
-#### **Manifest Configuration**
-- **Permissions:** Requires storage permissions for saving settings and host permissions for API access.
-- **Service Worker:** Background service worker (`background.js`) manages API communications.
+#### **Core Components**
+- **Content Script (`content.js`):** Handles webpage interaction, text selection, and mini-player
+- **Popup Interface (`popup.js`):** Manages user interface and audio conversion workflow
+- **Background Service:** Handles API communications and state management
+- **Style Management:** Dedicated CSS for extension styling and dark mode
 
-#### **API Interaction**
-- **Endpoint:** Uses the API at `http://45.94.111.107:6080/v1/audio/speech` for speech synthesis.
+#### **API Integration**
+- **Endpoint:** Secure connection to voice.cloud.atemkeng.de
 - **Request Structure:**
-  - `model`: Specifies the selected speech model.
-  - `input`: Text to be converted.
-  - `voice`: Selected voice for the model.
+  ```json
+  {
+    "model": "selected-model-id",
+    "voice": "selected-voice-id",
+    "input": "text-to-convert"
+  }
+  ```
 
-#### **Dynamic Voice Management**
-- Dynamically maps available voices to the selected model using a predefined configuration.
-- Automatically updates the voice dropdown based on the chosen model.
-
-#### **Dark Mode Implementation**
-- **LocalStorage Support:** Remembers user preference for dark mode across sessions.
-- **Toggle Button:** Allows users to switch between dark and light themes.
-
-#### **Audio Output**
-- **Blob Handling:** Converts the API response into a playable audio file using `URL.createObjectURL`.
-- **Delete Functionality:** Provides a delete button for each audio file to manage outputs effectively.
+#### **Audio Processing**
+- **Chunk Processing:** Automatic text chunking for large content
+- **Queue System:** FIFO queue for managing multiple audio requests
+- **Progress Tracking:** Real-time progress monitoring and UI updates
 
 ---
 
-### **Getting Started**
+### **Installation**
 
-#### **Installation**
-1. Download the extension files.
-2. Open `chrome://extensions` in your Chrome browser.
-3. Enable **Developer Mode**.
-4. Click on **Load Unpacked** and select the extension folder.
-
-#### **Usage**
-1. Click on the extension icon in the Chrome toolbar to open the popup.
-2. Enter text in the provided text area.
-3. Select a model and voice from the dropdown menus.
-4. Click **Convert to Speech** to generate audio.
-5. Play, manage, or delete the audio outputs as needed.
+1. Download the extension files
+2. Open Chrome and navigate to `chrome://extensions`
+3. Enable "Developer Mode"
+4. Click "Load Unpacked" and select the extension directory
 
 ---
 
-### **File Structure**
-- `manifest.json`: Configuration file for the Chrome extension.
-- `popup.html`: User interface for the extension.
-- `popup.js`: JavaScript logic for handling user input, API interaction, and UI functionality.
-- `style.css`: Styles for the extension's popup.
-- `icon/`: Folder containing icons for the extension.
+### **Usage**
+
+1. **Quick Convert:**
+   - Select text on any webpage
+   - Right-click and choose "Convert to Speech"
+   - Listen through the mini-player
+
+2. **Manual Convert:**
+   - Click the extension icon
+   - Enter or paste text
+   - Select language and voice
+   - Click "Convert"
+
+3. **Settings:**
+   - Access settings through the gear icon
+   - Customize voice, model, and interface preferences
+   - Toggle dark mode
+
+---
+
+### **Project Structure**
+```
+readme-tts/
+├── manifest.json     # Extension configuration
+├── popup.html       # Main interface
+├── popup.js         # Core functionality
+├── content.js       # Webpage interaction
+├── background.js    # Background services
+├── style.css        # Styling
+└── icon/           # Extension icons
+```
 
 ---
 
 ### **Future Enhancements**
-- Support for offline text-to-speech processing.
-- Option to save generated audio files to the local system.
-- More comprehensive error messages and diagnostics.
-- Integration with additional APIs for expanded voice options.
+- Offline processing capability
+- Additional language support
+- Custom voice training integration
+- Browser-native audio download support
+- Enhanced accessibility features
 
 ---
 
-This extension serves as an intuitive tool for converting text to speech, offering versatility in voice and language options, and a clean, modern interface.
+This extension represents a sophisticated approach to text-to-speech conversion, combining powerful features with a user-friendly interface. It's designed for both casual users and those requiring advanced audio management capabilities.
