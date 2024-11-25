@@ -47,11 +47,6 @@ function cleanup() {
   }
 }
 
-// Function to check if extension context is valid
-function isExtensionContextValid() {
-  return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
-}
-
 // Function to handle page interactions with context check
 document.addEventListener('click', () => {
   if (!isContextValid) return;
