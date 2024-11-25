@@ -635,8 +635,15 @@ function updatePlayerUI(audioEntry) {
   }
 
   // Update chunk information
-  const currentIndex =
-    audioQueue.findIndex((entry) => entry === audioEntry) + 1;
+  let currentIndex = 0;
+  if (audioQueue.length > 0) {
+    // Find the index of the currently playing audio
+    const playingIndex = audioQueue.findIndex((entry) => {
+      return entry.audio === currentAudio && !entry.audio.paused;
+    });
+    currentIndex = playingIndex >= 0 ? playingIndex + 1 : 1;
+  }
+
   if (currentChunkDisplay) {
     currentChunkDisplay.textContent = currentIndex.toString();
   }
@@ -1162,31 +1169,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           // Process chunks
           for (let i = 0; i < finalChunks.length; i++) {
-            const chunk = finalChunks[i];
-            // Detect if this chunk is a heading
-            const isHeading =
-              /^#{1,6}\s+/.test(chunk) || // Markdown headings
-              /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(chunk) || // Numbered headings
-              (chunk.length < 100 &&
-                !/[.!?:,;]$/.test(chunk) &&
-                /^[A-Z]/.test(chunk)) || // Short title-like lines
-              (chunk.toUpperCase() === chunk && chunk.length < 100); // ALL CAPS lines
-
             convertButton.textContent = `Converting ${
-              isHeading ? "heading" : "paragraph"
-            } ${i + 1}/${finalChunks.length}...`;
+              i + 1}/${finalChunks.length}...`;
             try {
               await convertTextToSpeech(finalChunks[i]);
             } catch (error) {
               console.error(
-                `Error converting ${isHeading ? "heading" : "paragraph"} ${
-                  i + 1
-                }:`,
+                `Error converting chunk ${i}:`,
                 error
               );
-              convertButton.textContent = `Error in ${
-                isHeading ? "heading" : "paragraph"
-              } ${i + 1}: ${error.message}`;
+              convertButton.textContent = `Error in chunk ${i + 1}: ${
+                error.message
+              }`;
               await new Promise((resolve) => setTimeout(resolve, 2000)); // Show error for 2 seconds
             }
           }
