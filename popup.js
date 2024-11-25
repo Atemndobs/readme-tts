@@ -5,6 +5,25 @@ let audioQueue = [];
 let isProcessingQueue = false;
 let savedInputText = null;
 
+// Audio conversion state management
+let currentConversion = {
+  id: null,
+  parts: [],
+  totalDuration: 0,
+  isComplete: false
+};
+
+// Global progress tracking
+let globalProgress = {
+  totalDuration: 0,
+  currentTime: 0,
+  parts: [],
+  conversionId: null,
+  isPlaying: false,
+  currentPartIndex: 0,
+  currentText: ''
+};
+
 // Maximum number of retries for operations
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
@@ -266,10 +285,12 @@ async function checkTextSelection() {
       const restrictedUrls = [
         "chrome://",
         "chrome-extension://",
+        "chrome-search://",
+        "chrome-devtools://",
         "about:",
-        "file://",
         "edge://",
-        "about:blank",
+        "data:",
+        "view-source:",
       ];
       if (tab.url && restrictedUrls.some((url) => tab.url.startsWith(url))) {
         console.log("Cannot access restricted URL:", tab.url);
@@ -411,70 +432,65 @@ async function convertTextToSpeech(text) {
 // Function to create audio entry
 function createAudioEntry(text, audioUrl) {
   const audio = new Audio(audioUrl);
+  
+  const audioEntry = {
+    text: text,
+    audio: audio
+  };
 
-  // Set up audio event listeners
-  audio.addEventListener("loadedmetadata", () => {
-    console.log("Audio metadata loaded:", {
-      duration: audio.duration,
-      readyState: audio.readyState,
-    });
+  // Add to current conversion
+  addAudioPart(audioEntry);
 
-    // Validate duration before updating UI
-    if (!isNaN(audio.duration) && isFinite(audio.duration)) {
-      updatePlayerUI({ audio, text });
-    } else {
-      console.warn("Invalid duration after metadata load:", audio.duration);
+  // Set up audio event handlers
+  audio.addEventListener('loadedmetadata', () => {
+    // Re-initialize progress bar when all parts are loaded
+    if (currentConversion.parts.length === audioQueue.length) {
+      initializeGlobalProgress();
     }
   });
 
-  // Handle play/pause events
-  audio.addEventListener("play", () => {
-    console.log("Audio playing");
-    updatePlayerUI({ audio, text });
+  setupAudioListeners(audio);
+
+  audio.addEventListener('play', () => {
+    globalProgress.isPlaying = true;
+    updatePlayerUI(audioEntry);
   });
 
-  audio.addEventListener("pause", () => {
-    console.log("Audio paused");
-    updatePlayerUI({ audio, text });
+  audio.addEventListener('pause', () => {
+    globalProgress.isPlaying = false;
+    updatePlayerUI(audioEntry);
   });
 
-  // Handle errors
-  audio.addEventListener("error", (e) => {
-    console.error("Audio error:", e.target.error);
-    showMessage("Error playing audio. Please try again.");
-  });
-
-  // Handle audio loading
-  audio.addEventListener("canplay", () => {
-    console.log("Audio can play");
-    updatePlayerUI({ audio, text });
-  });
-
-  // Handle audio ended
-  audio.addEventListener("ended", () => {
-    console.log("Audio ended, checking for next audio");
-    const currentIndex = audioQueue.findIndex((entry) => entry.audio === audio);
+  audio.addEventListener('ended', () => {
+    globalProgress.isPlaying = false;
+    
+    // Move to next part if available
+    const currentIndex = audioQueue.findIndex(entry => entry.audio === audio);
     if (currentIndex < audioQueue.length - 1) {
-      // Play next audio
       const nextEntry = audioQueue[currentIndex + 1];
       currentAudio = nextEntry.audio;
-      currentAudio.play().catch((error) => {
-        console.error("Error playing next audio:", error);
-        showMessage("Error playing next audio. Please try again.");
+      currentAudio.currentTime = 0;
+      
+      // Update state
+      globalProgress.currentPartIndex = currentIndex + 1;
+      globalProgress.isPlaying = true;
+      
+      // Play and update UI
+      currentAudio.play().catch(error => {
+        console.error('Error playing next audio:', error);
       });
       updatePlayerUI(nextEntry);
-    } else {
-      console.log("No more audio in queue");
-      // Reset play button when playlist ends
+      
+      // Update play button state
       const playIcon = document.querySelector("#playPauseButton i");
-      if (playIcon) {
-        playIcon.className = "fa-solid fa-play";
-      }
+      if (playIcon) playIcon.className = "fa-solid fa-pause";
+    } else {
       currentAudio = null;
+      currentConversion.isComplete = true;
     }
   });
 
-  return { audio, text };
+  return audioEntry;
 }
 
 // Function to process audio queue
@@ -536,121 +552,173 @@ function addToAudioQueue(audioEntry) {
   }
 }
 
-// Function to update player UI
-function updatePlayerUI(audioEntry) {
-  const playButton = document.querySelector(".play-button");
-  const progressRing = document.querySelector(".progress-ring-circle");
+// Playback control functions
+function togglePlayPause() {
+  const playIcon = document.querySelector("#playPauseButton i");
+  
+  if (!currentAudio) {
+    // If no audio is playing, start from the beginning of the queue
+    if (audioQueue.length > 0) {
+      currentAudio = audioQueue[0].audio;
+      updatePlayerUI(audioQueue[0]);
+    } else {
+      return;
+    }
+  }
+
+  if (currentAudio.paused) {
+    currentAudio.play().catch(error => {
+      console.error('Error playing audio:', error);
+    });
+    playIcon.className = "fa-solid fa-pause";
+    globalProgress.isPlaying = true;
+  } else {
+    currentAudio.pause();
+    playIcon.className = "fa-solid fa-play";
+    globalProgress.isPlaying = false;
+  }
+  updateGlobalProgress();
+}
+
+function skipToNext() {
+  if (!currentAudio || audioQueue.length === 0) return;
+
+  const currentIndex = audioQueue.findIndex(entry => entry.audio === currentAudio);
+  if (currentIndex < audioQueue.length - 1) {
+    currentAudio.pause();
+    const nextEntry = audioQueue[currentIndex + 1];
+    currentAudio = nextEntry.audio;
+    currentAudio.currentTime = 0;
+    
+    // Update state
+    globalProgress.currentPartIndex = currentIndex + 1;
+    globalProgress.isPlaying = true;
+    
+    // Play and update UI
+    currentAudio.play().catch(error => {
+      console.error('Error playing next audio:', error);
+    });
+    updatePlayerUI(nextEntry);
+    
+    // Update play button state
+    const playIcon = document.querySelector("#playPauseButton i");
+    if (playIcon) playIcon.className = "fa-solid fa-pause";
+  }
+}
+
+function skipToPrevious() {
+  if (!currentAudio || audioQueue.length === 0) return;
+
+  const currentIndex = audioQueue.findIndex(entry => entry.audio === currentAudio);
+  if (currentIndex > 0) {
+    currentAudio.pause();
+    const prevEntry = audioQueue[currentIndex - 1];
+    currentAudio = prevEntry.audio;
+    currentAudio.currentTime = 0;
+    
+    // Update state
+    globalProgress.currentPartIndex = currentIndex - 1;
+    globalProgress.isPlaying = true;
+    
+    // Play and update UI
+    currentAudio.play().catch(error => {
+      console.error('Error playing previous audio:', error);
+    });
+    updatePlayerUI(prevEntry);
+    
+    // Update play button state
+    const playIcon = document.querySelector("#playPauseButton i");
+    if (playIcon) playIcon.className = "fa-solid fa-pause";
+  }
+}
+
+// Update the updatePlayerUI function
+function updatePlayerUI(entry) {
+  const textDisplay = document.getElementById("currentAudioText");
+  const playIcon = document.querySelector("#playPauseButton i");
   const currentTimeDisplay = document.getElementById("currentTime");
   const durationDisplay = document.getElementById("duration");
   const currentChunkDisplay = document.getElementById("currentChunk");
   const totalChunksDisplay = document.getElementById("totalChunks");
-  const currentAudioTextDisplay = document.getElementById("currentAudioText");
+  const progressRing = document.querySelector(".progress-ring-circle");
+  
+  // Update text display
+  if (textDisplay && entry.text) {
+    textDisplay.textContent = entry.text.length > 100 ? 
+      entry.text.substring(0, 100) + "..." : 
+      entry.text;
+    globalProgress.currentText = entry.text;
+  }
 
-  // Update total chunks immediately
+  // Update play/pause button
+  if (playIcon) {
+    playIcon.className = currentAudio?.paused ? 
+      "fa-solid fa-play" : 
+      "fa-solid fa-pause";
+  }
+
+  // Update time displays
+  if (currentTimeDisplay && currentAudio) {
+    currentTimeDisplay.textContent = formatTime(currentAudio.currentTime);
+  }
+  if (durationDisplay && currentAudio) {
+    durationDisplay.textContent = formatTime(currentAudio.duration);
+  }
+
+  // Update chunk information
+  const currentIndex = audioQueue.findIndex(item => item === entry) + 1;
+  if (currentChunkDisplay) {
+    currentChunkDisplay.textContent = currentIndex.toString();
+  }
   if (totalChunksDisplay) {
     totalChunksDisplay.textContent = audioQueue.length.toString();
   }
 
-  if (!audioEntry || !audioEntry.audio) {
-    // Reset UI when no audio is playing
-    if (playButton) {
-      playButton.innerHTML = '<i class="fa-solid fa-play"></i>';
-      playButton.classList.remove("playing");
-    }
-    if (progressRing) {
-      progressRing.style.strokeDashoffset = 163.36; // Full circle
-    }
-    if (currentTimeDisplay) currentTimeDisplay.textContent = "0:00";
-    if (durationDisplay) durationDisplay.textContent = "0:00";
-    if (currentChunkDisplay) currentChunkDisplay.textContent = "0";
-    if (currentAudioTextDisplay) currentAudioTextDisplay.textContent = "";
-    if (textInput) textInput.value = "";
-    return;
+  // Update progress ring
+  if (progressRing && currentAudio) {
+    const progress = currentAudio.currentTime / currentAudio.duration || 0;
+    const circumference = 163.36;
+    const offset = circumference - progress * circumference;
+    progressRing.style.strokeDashoffset = offset;
   }
 
-  const { audio, text } = audioEntry;
-
-  // Update play/pause button
-  if (playButton) {
-    playButton.innerHTML = audio.paused
-      ? '<i class="fa-solid fa-play"></i>'
-      : '<i class="fa-solid fa-pause"></i>';
-    playButton.classList.toggle("playing", !audio.paused);
+  // Update progress tracking
+  globalProgress.isPlaying = !currentAudio?.paused;
+  globalProgress.currentPartIndex = currentIndex - 1;
+  
+  // Update skip buttons state
+  const prevButton = document.getElementById("prevAudio");
+  const nextButton = document.getElementById("nextAudio");
+  
+  if (prevButton) {
+    prevButton.disabled = globalProgress.currentPartIndex <= 0;
   }
-
-  // Update progress ring and time displays
-  const updateProgress = () => {
-    // Skip if audio isn't ready
-    if (!audio.readyState) {
-      console.log("Audio not ready yet");
-      return;
-    }
-
-    // Ensure we have valid duration
-    if (isNaN(audio.duration) || !isFinite(audio.duration)) {
-      console.warn("Invalid audio duration:", audio.duration);
-      return;
-    }
-
-    // Update progress ring
-    if (progressRing) {
-      const progress = audio.currentTime / audio.duration || 0;
-      const circumference = 163.36;
-      const offset = circumference - progress * circumference;
-      progressRing.style.strokeDashoffset = offset;
-    }
-
-    // Update time displays with validation
-    if (currentTimeDisplay && !isNaN(audio.currentTime)) {
-      currentTimeDisplay.textContent = formatTime(
-        Math.max(0, audio.currentTime)
-      );
-    }
-    if (durationDisplay && !isNaN(audio.duration)) {
-      durationDisplay.textContent = formatTime(Math.max(0, audio.duration));
-    }
-  };
-
-  // Add timeupdate listener for continuous progress updates
-  audio.removeEventListener("timeupdate", updateProgress); // Remove any existing listener
-  audio.addEventListener("timeupdate", updateProgress);
-  audio.addEventListener("durationchange", updateProgress); // Add listener for when duration becomes available
-
-  // Initial progress update if audio is ready
-  if (audio.readyState) {
-    updateProgress();
+  if (nextButton) {
+    nextButton.disabled = globalProgress.currentPartIndex >= audioQueue.length - 1;
   }
-
-  // Update chunk information
-  let currentIndex = 0;
-  if (audioQueue.length > 0) {
-    // Find the index of the currently playing audio
-    const playingIndex = audioQueue.findIndex((entry) => {
-      return entry.audio === currentAudio && !entry.audio.paused;
-    });
-    currentIndex = playingIndex >= 0 ? playingIndex + 1 : 1;
-  }
-
-  if (currentChunkDisplay) {
-    currentChunkDisplay.textContent = currentIndex.toString();
-  }
-
-  // Update text preview
-  if (currentAudioTextDisplay) {
-    currentAudioTextDisplay.textContent =
-      text.length > 100 ? text.substring(0, 100) + "..." : text;
-  }
-
-  // Update input field with current chunk text
-  if (textInput && !audio.paused) {
-    textInput.value = text;
-  }
-
-  // Clean up timeupdate listener when audio ends
-  audio.addEventListener("ended", () => {
-    audio.removeEventListener("timeupdate", updateProgress);
-  });
+  
+  updateGlobalProgress();
 }
+
+// Add event listeners for playback controls
+document.addEventListener('DOMContentLoaded', () => {
+  const playPauseButton = document.getElementById("playPauseButton");
+  const previousButton = document.getElementById("prevAudio");
+  const nextButton = document.getElementById("nextAudio");
+  const textDisplay = document.getElementById("currentAudioText");
+  
+  if (playPauseButton) {
+    playPauseButton.addEventListener("click", togglePlayPause);
+  }
+  
+  if (previousButton) {
+    previousButton.addEventListener("click", skipToPrevious);
+  }
+  
+  if (nextButton) {
+    nextButton.addEventListener("click", skipToNext);
+  }
+});
 
 // Function to format time
 function formatTime(seconds) {
@@ -1543,4 +1611,306 @@ function showMessage(text, type = 'error', duration = 3000) {
       messageDiv.hidden = true;
     }, duration);
   }
+}
+
+// Function to initialize global progress bar
+function initializeGlobalProgress() {
+  const track = document.querySelector('.global-track');
+  const markers = document.getElementById('partMarkers');
+  
+  if (!track || !markers || !currentConversion.id) return;
+
+  // Ensure we have valid durations
+  if (currentConversion.totalDuration <= 0) {
+    let total = 0;
+    currentConversion.parts.forEach(part => {
+      if (part.audio.duration) {
+        total += part.audio.duration;
+      }
+    });
+    currentConversion.totalDuration = total;
+  }
+
+  // Clear existing markers
+  markers.innerHTML = '';
+  
+  // Create markers for each part
+  currentConversion.parts.forEach((part, index) => {
+    const startTime = currentConversion.parts
+      .slice(0, index)
+      .reduce((sum, p) => sum + (p.duration || 0), 0);
+
+    const marker = document.createElement('div');
+    marker.className = 'marker';
+    const position = (startTime / currentConversion.totalDuration) * 100;
+    marker.style.left = `${position}%`;
+    marker.setAttribute('data-index', index);
+    marker.setAttribute('data-start', startTime);
+    
+    // Add click handler for the marker
+    marker.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const clickedIndex = parseInt(event.target.getAttribute('data-index'));
+      const startTime = parseFloat(event.target.getAttribute('data-start'));
+      
+      if (currentConversion.parts[clickedIndex]) {
+        const targetEntry = audioQueue[clickedIndex];
+        if (targetEntry) {
+          if (currentAudio) {
+            currentAudio.pause();
+          }
+          
+          // Update queue and play from the clicked part
+          audioQueue = audioQueue.slice(clickedIndex);
+          currentAudio = targetEntry.audio;
+          currentAudio.currentTime = 0; // Start from beginning of the clicked part
+          
+          // Update global progress state
+          globalProgress.currentPartIndex = clickedIndex;
+          globalProgress.currentTime = startTime;
+          
+          // Play the audio and update UI
+          currentAudio.play().catch(error => {
+            console.error('Error playing audio:', error);
+          });
+          updatePlayerUI(targetEntry);
+          
+          // Update marker states
+          document.querySelectorAll('.marker').forEach((m, i) => {
+            m.classList.toggle('active', i === clickedIndex);
+          });
+        }
+      }
+    });
+    
+    markers.appendChild(marker);
+  });
+
+  // Add click handler for the track
+  track.removeEventListener('click', handleTrackClick);
+  track.addEventListener('click', handleTrackClick);
+}
+
+// Function to handle track clicks
+function handleTrackClick(event) {
+  if (!currentAudio || !currentConversion.totalDuration) return;
+
+  const track = event.currentTarget;
+  const rect = track.getBoundingClientRect();
+  const clickPosition = (event.clientX - rect.left) / rect.width;
+  const targetTime = clickPosition * currentConversion.totalDuration;
+
+  let accumulatedTime = 0;
+  let targetPart = null;
+  let timeInPart = 0;
+
+  for (let i = 0; i < currentConversion.parts.length; i++) {
+    const part = currentConversion.parts[i];
+    if (targetTime >= accumulatedTime && targetTime < accumulatedTime + part.duration) {
+      targetPart = part;
+      timeInPart = targetTime - accumulatedTime;
+      break;
+    }
+    accumulatedTime += part.duration;
+  }
+
+  if (!targetPart && targetTime >= currentConversion.totalDuration) {
+    targetPart = currentConversion.parts[currentConversion.parts.length - 1];
+    timeInPart = targetPart.duration;
+  }
+
+  if (targetPart) {
+    const targetEntry = audioQueue[targetPart.index];
+    if (targetEntry) {
+      if (currentAudio) {
+        currentAudio.pause();
+      }
+      audioQueue = audioQueue.slice(targetPart.index);
+      currentAudio = targetEntry.audio;
+      currentAudio.currentTime = Math.min(timeInPart, currentAudio.duration);
+      currentAudio.play().catch(error => {
+        console.error('Error playing audio:', error);
+      });
+      updatePlayerUI(targetEntry);
+    }
+  }
+}
+
+// Function to update global progress
+function updateGlobalProgress() {
+  if (!currentAudio || !currentConversion.totalDuration) return;
+
+  const fill = document.querySelector('.global-fill');
+  const markers = document.querySelectorAll('.marker');
+  const prevTime = document.getElementById('prevTime');
+  const nextTime = document.getElementById('nextTime');
+
+  const currentPartIndex = currentConversion.parts.findIndex(part => part.audio === currentAudio);
+  if (currentPartIndex === -1) return;
+
+  // Calculate global current time
+  const previousPartsTime = currentConversion.parts
+    .slice(0, currentPartIndex)
+    .reduce((sum, part) => sum + (part.duration || 0), 0);
+  const globalCurrentTime = previousPartsTime + currentAudio.currentTime;
+
+  // Update fill
+  if (fill) {
+    const progressPercentage = (globalCurrentTime / currentConversion.totalDuration) * 100;
+    fill.style.width = `${progressPercentage}%`;
+  }
+
+  // Update markers
+  markers.forEach(marker => {
+    const index = parseInt(marker.getAttribute('data-index'));
+    marker.classList.toggle('active', index === currentPartIndex);
+  });
+
+  // Update time labels
+  if (prevTime && currentPartIndex > 0) {
+    const prevPartStartTime = currentConversion.parts
+      .slice(0, currentPartIndex)
+      .reduce((sum, part) => sum + (part.duration || 0), 0);
+    prevTime.textContent = formatTime(prevPartStartTime);
+  } else if (prevTime) {
+    prevTime.textContent = '0:00';
+  }
+
+  if (nextTime && currentPartIndex < currentConversion.parts.length - 1) {
+    const nextPartStartTime = currentConversion.parts
+      .slice(0, currentPartIndex + 1)
+      .reduce((sum, part) => sum + (part.duration || 0), 0);
+    nextTime.textContent = formatTime(nextPartStartTime);
+  } else if (nextTime) {
+    nextTime.textContent = formatTime(currentConversion.totalDuration);
+  }
+}
+
+// Function to generate conversion ID
+function generateConversionId() {
+  return `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Function to reset conversion state
+function resetConversionState() {
+  currentConversion = {
+    id: generateConversionId(),
+    parts: [],
+    totalDuration: 0,
+    isComplete: false
+  };
+  globalProgress = {
+    totalDuration: 0,
+    currentTime: 0,
+    parts: [],
+    conversionId: currentConversion.id,
+    isPlaying: false,
+    currentPartIndex: 0,
+    currentText: ''
+  };
+  
+  // Reset UI elements
+  const fill = document.querySelector('.global-fill');
+  const markers = document.getElementById('partMarkers');
+  if (fill) fill.style.width = '0%';
+  if (markers) markers.innerHTML = '';
+}
+
+// Function to add audio part to current conversion
+function addAudioPart(audioEntry) {
+  if (!currentConversion.id) {
+    resetConversionState();
+  }
+
+  const part = {
+    index: currentConversion.parts.length,
+    audio: audioEntry.audio,
+    text: audioEntry.text,
+    duration: 0
+  };
+
+  // Wait for audio duration to be available
+  const checkDuration = () => {
+    if (audioEntry.audio.duration) {
+      part.duration = audioEntry.audio.duration;
+      currentConversion.totalDuration += part.duration;
+      updateGlobalProgress();
+    } else {
+      setTimeout(checkDuration, 100);
+    }
+  };
+  checkDuration();
+
+  currentConversion.parts.push(part);
+  return part;
+}
+
+function resetConversionState() {
+  currentConversion = {
+    id: generateConversionId(),
+    parts: [],
+    totalDuration: 0,
+    isComplete: false
+  };
+  
+  // Reset global progress
+  globalProgress = {
+    totalDuration: 0,
+    currentTime: 0,
+    parts: [],
+    conversionId: currentConversion.id,
+    isPlaying: false,
+    currentPartIndex: 0,
+    currentText: ''
+  };
+  
+  // Reset UI elements
+  const fill = document.querySelector('.global-fill');
+  const markers = document.getElementById('partMarkers');
+  if (fill) fill.style.width = '0%';
+  if (markers) markers.innerHTML = '';
+}
+
+// Update the updatePlayerUI function to use global state
+function updatePlayerUI(entry) {
+  const textDisplay = document.getElementById("currentAudioText");
+  if (textDisplay && entry.text) {
+    textDisplay.textContent = entry.text;
+    globalProgress.currentText = entry.text;
+  }
+
+  // Update progress tracking
+  globalProgress.isPlaying = true;
+  globalProgress.currentPartIndex = audioQueue.findIndex(item => item === entry);
+  
+  updateGlobalProgress();
+}
+
+function setupAudioListeners(audio) {
+  const updateProgress = () => {
+    const currentTimeDisplay = document.getElementById("currentTime");
+    const durationDisplay = document.getElementById("duration");
+    const progressRing = document.querySelector(".progress-ring-circle");
+    
+    if (currentTimeDisplay) {
+      currentTimeDisplay.textContent = formatTime(audio.currentTime);
+    }
+    if (durationDisplay) {
+      durationDisplay.textContent = formatTime(audio.duration);
+    }
+    if (progressRing) {
+      const progress = audio.currentTime / audio.duration || 0;
+      const circumference = 163.36;
+      const offset = circumference - progress * circumference;
+      progressRing.style.strokeDashoffset = offset;
+    }
+    
+    updateGlobalProgress();
+  };
+
+  audio.addEventListener("timeupdate", updateProgress);
+  audio.addEventListener("durationchange", updateProgress);
+  audio.addEventListener("ended", () => {
+    audio.removeEventListener("timeupdate", updateProgress);
+  });
 }

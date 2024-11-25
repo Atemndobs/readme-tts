@@ -120,24 +120,49 @@ async function handleTabUpdate(tabId, changeInfo, tab) {
           console.log('Injecting content script into tab:', tabId);
           
           try {
+            // First check if content script is already present
+            try {
+              const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+              if (response?.success) {
+                console.log('Content script already present in tab:', tabId);
+                injectedTabs.add(tabId);
+                return;
+              }
+            } catch (e) {
+              // Content script not present, continue with injection
+            }
+            
+            // Inject the content script
             await chrome.scripting.executeScript({
               target: { tabId: tabId },
               files: ['content.js']
             });
-            injectedTabs.add(tabId);
-            console.log('Content script injected successfully into tab:', tabId);
+            
+            // Wait a bit for the script to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
             
             // Verify content script is responsive
-            const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
-            if (response?.success) {
-              console.log('Content script verified in tab:', tabId);
-            } else {
-              throw new Error('Content script not responsive');
+            try {
+              const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+              if (response?.success) {
+                console.log('Content script verified in tab:', tabId);
+                injectedTabs.add(tabId);
+              } else {
+                throw new Error('Content script not responsive');
+              }
+            } catch (e) {
+              console.warn('Content script verification failed:', e);
+              // Don't throw here, as the script might still work
+              injectedTabs.add(tabId);
             }
           } catch (error) {
+            if (error.message.includes('Cannot access a chrome:// URL') ||
+                error.message.includes('Cannot access a restricted URL')) {
+              console.log('Skipping injection for restricted URL:', tab.url);
+              return;
+            }
             console.error('Error injecting content script:', error);
             injectedTabs.delete(tabId);
-            throw error;
           }
         }
       });
