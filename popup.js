@@ -1367,6 +1367,14 @@ document.addEventListener("DOMContentLoaded", async () => {
           throw new Error("No readable text found on the page");
         }
 
+        // Disable the button during conversion
+        const originalButtonText = convertPageButton.textContent;
+        const originalButtonIcon = '<i class="fa-solid fa-book-open-reader"></i>';
+        const spinningIconHtml = 'Working <i class="fas fa-spinner fa-spin"></i> ';
+        convertPageButton.disabled = true;
+        convertPageButton.innerHTML = spinningIconHtml;
+        convertPageButton.style.cursor = 'wait';
+
         // Process the text chunks
         await handleWebPageConversion(result.result, result.result.length);
         hideUrlInputGroup(); // Hide URL input group after successful conversion
@@ -1375,6 +1383,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (urlInput) {
           urlInput.value = "";
         }
+
+        // Re-enable the button after conversion
+        convertPageButton.disabled = false;
+        convertPageButton.innerHTML = ' Read Page' + originalButtonIcon;
+        convertPageButton.style.cursor = 'pointer';
       } catch (error) {
         // Show the URL input field after error if it was previously hidden
 
@@ -1384,11 +1397,19 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (urlInputGroup) {
             urlInputGroup.style.display = "flex";
           }
-        }else {
+        } else {
           console.error("Error converting page:", error);
           showMessage(`Error: ${
             error.message || "Failed to convert page"
           }. Please try again.`);
+        }
+
+        // Re-enable the button after error
+        if (convertPageButton) {
+          const originalButtonIcon = '<i class="fa-solid fa-book-open-reader"></i>';
+          convertPageButton.disabled = false;
+          convertPageButton.innerHTML = originalButtonIcon + ' Read Page';
+          convertPageButton.style.cursor = 'pointer';
         }
       }
     });
