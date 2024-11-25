@@ -1,7 +1,7 @@
 /* Basic styling for the popup */
 body {
     font-family: Arial, sans-serif;
-    padding: 20px;
+    padding: 10px;
     background-color: #f4f4f9;
     color: #333;
     transition: background-color 0.3s, color 0.3s;
@@ -64,7 +64,8 @@ label {
 
 /* Dark mode styles for input elements */
 .dark-mode textarea,
-.dark-mode select {
+.dark-mode select,
+.dark-mode input[type="url"] {
     background-color: #2d2d2d;
     color: #fff;
     border: 1px solid #404040;
@@ -80,16 +81,24 @@ label {
 }
 
 /* Input elements default styling */
-textarea, select {
+textarea, select, input[type="url"] {
     width: calc(100% - 16px); /* Account for padding */
     padding: 8px;
-    margin-bottom: 15px;
+    margin-bottom: 1px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background-color: #fff;
     color: #333;
     transition: background-color 0.3s, color 0.3s, border-color 0.3s;
     font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+textarea::placeholder,
+input[type="url"]::placeholder {
+    color: #666;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 textarea {
@@ -191,6 +200,15 @@ select {
   padding: 0 10px;
 }
 
+/* Action buttons styling */
+.page-url-group {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+  padding: 0 10px;
+  padding-left: 8px;
+}
+
 .action-button {
   display: flex;
   align-items: center;
@@ -224,8 +242,10 @@ select {
 /* Message and audio container styling */
 #message {
     color: #dc3545;
-    margin-bottom: 10px;
-    font-size: 14px;
+    margin: 4px 0;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
 }
 
 #audioContainer {
@@ -339,26 +359,37 @@ audio {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* gap: 16px; */
-  /* padding: 16px; */
-  /* margin: 16px 0; */
   background-color: #f5f5f5;
   border-radius: 8px;
   width: 100%;
   box-sizing: border-box;
+  margin-top: 0px;
 }
 
 .dark-mode .audio-player-container {
-  /* background-color: #2d2d2d; */
   background-color: #1a1a1a;
 }
 
+/* Audio player top bar */
+.audio-top-bar {
+  display: flex;
+  justify-content: center;
+  /* padding-bottom: 16px; */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .audio-top-bar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Navigation controls */
 .navigation-controls {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 24px;
   width: 100%;
+  padding-top: 16px;
 }
 
 .nav-button {
@@ -545,16 +576,16 @@ audio {
 }
 
 /* Audio player top bar */
-.audio-top-bar {
+/* .audio-top-bar {
   display: flex;
   justify-content: center;
-  /* padding: 8px 0; */
+  padding: 8px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .dark-mode .audio-top-bar {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
+} */
 
 /* Highlight styles */
 .tts-highlight {
@@ -711,7 +742,7 @@ select {
 
 .language-display {
   position: absolute;
-  top: 40px;
+  top: 30px;
   left: 6%;
   display: flex;
   align-items: center;
@@ -747,14 +778,6 @@ select {
 }
 
 /* Message styling */
-#message {
-  text-align: center;
-  margin: 10px 0;
-  padding: 8px;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-
 #message.success {
   color: #155724;
   background-color: #d4edda;
@@ -783,7 +806,7 @@ select {
 .text-input-controls {
   display: flex;
   justify-content: center;
-  margin: 10px 0;
+  margin: 4px 0px;
 }
 
 .toggle-button {
@@ -818,10 +841,19 @@ select {
   max-height: 300px;
   overflow: hidden;
   transition: max-height 0.3s ease;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
+  padding-left: 8px;
 }
 
 .text-input-container.collapsed {
   max-height: 0;
   margin-bottom: 0;
+}
+
+#textInputContainer {
+  margin-bottom: 4px;
+}
+
+#textInput {
+  margin-bottom: 4px;
 }
