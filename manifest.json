@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ReadMe - Text to Speech",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Convert text to speech with advanced audio management",
   "permissions": [
     "storage",
