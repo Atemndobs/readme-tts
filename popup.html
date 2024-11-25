@@ -32,7 +32,7 @@
     </button>
   </div>
 
-  <div class="action-buttons">
+  <div class="page-url-group" id="pageUrlGroup" hidden>
     <div class="url-input-group">
       <input type="url" id="pageUrlInput" placeholder="Enter webpage URL" hidden/>
     </div>
@@ -42,7 +42,7 @@
     <textarea id="textInput" placeholder="Enter text here"></textarea>
     <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
   </div>
-  <div id="message"></div>
+  <div id="message" hidden></div>
   
   <!-- Custom Audio Player -->
   <div id="audioPlayerContainer" class="audio-player-container">
@@ -52,7 +52,6 @@
         View text
       </button>
       <button id="convertPageButton" class="action-button" title="Convert Webpage to Speech">
-  
         Read Page
         <i class="fa-solid fa-book-open-reader"></i>
       </button>

@@ -403,12 +403,7 @@ async function convertTextToSpeech(text) {
     // }
   } catch (error) {
     console.error("Error converting text to speech:", error);
-    if (messageDiv) {
-      messageDiv.textContent = `Error: ${error.message}`;
-      setTimeout(() => {
-        messageDiv.textContent = "";
-      }, 5000);
-    }
+    showMessage(`Error: ${error.message}`);
     throw error;
   }
 }
@@ -446,9 +441,7 @@ function createAudioEntry(text, audioUrl) {
   // Handle errors
   audio.addEventListener("error", (e) => {
     console.error("Audio error:", e.target.error);
-    if (messageDiv) {
-      messageDiv.textContent = "Error playing audio. Please try again.";
-    }
+    showMessage("Error playing audio. Please try again.");
   });
 
   // Handle audio loading
@@ -467,11 +460,7 @@ function createAudioEntry(text, audioUrl) {
       currentAudio = nextEntry.audio;
       currentAudio.play().catch((error) => {
         console.error("Error playing next audio:", error);
-        if (messageDiv) {
-          messageDiv.textContent =
-            "Error playing next audio. Please try again.";
-          setTimeout(() => (messageDiv.textContent = ""), 3000);
-        }
+        showMessage("Error playing next audio. Please try again.");
       });
       updatePlayerUI(nextEntry);
     } else {
@@ -531,9 +520,7 @@ async function processAudioQueue() {
     updatePlayerUI(currentEntry);
   } catch (error) {
     console.error("Error playing audio:", error);
-    if (messageDiv) {
-      messageDiv.textContent = "Error playing audio. Please try again.";
-    }
+    showMessage("Error playing audio. Please try again.");
     isProcessingQueue = false;
     audioQueue.shift();
     processAudioQueue();
@@ -709,30 +696,20 @@ async function handleWebPageConversion(chunks, totalChunks) {
       }
     } catch (error) {
       console.error(`Error converting chunk ${i}:`, error);
-      if (messageDiv) {
-        messageDiv.textContent = `Error converting chunk ${
-          i + 1
-        }/${totalChunks}, ${error.message || "Unknown error"}`;
-        setTimeout(() => {
-          if (messageDiv) {
-            messageDiv.textContent = "";
-          }
-        }, 3000);
-      }
+      showMessage(`Error converting chunk ${
+        i + 1
+      }/${totalChunks}, ${error.message || "Unknown error"}`);
       continue;
     }
   }
 
-  if (messageDiv) {
-    messageDiv.textContent = "Page conversion completed!";
-    messageDiv.className = "success";
-    setTimeout(() => {
-      if (messageDiv) {
-        messageDiv.textContent = "";
-        messageDiv.className = "";
-      }
-    }, 3000);
-  }
+  showMessage("Page conversion completed!", "success");
+  setTimeout(() => {
+    if (messageDiv) {
+      messageDiv.textContent = "";
+      messageDiv.className = "";
+    }
+  }, 3000);
 
   // Hide convert button after successful conversion
   if (convertButton) {
@@ -1409,11 +1386,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
         }else {
           console.error("Error converting page:", error);
-          if (messageDiv) {
-            messageDiv.textContent = `Error: ${
-              error.message || "Failed to convert page"
-            }. Please try again.`;
-          }
+          showMessage(`Error: ${
+            error.message || "Failed to convert page"
+          }. Please try again.`);
         }
       }
     });
@@ -1531,5 +1506,20 @@ function hideUrlInputGroup() {
   }
   if (urlInputGroup) {
     urlInputGroup.style.display = "none";
+  }
+}
+
+// Function to show message with auto-hide
+function showMessage(text, type = 'error', duration = 3000) {
+  if (messageDiv) {
+    messageDiv.textContent = text;
+    messageDiv.className = type;
+    messageDiv.hidden = false;
+    
+    // Auto-hide after duration
+    setTimeout(() => {
+      messageDiv.textContent = '';
+      messageDiv.hidden = true;
+    }, duration);
   }
 }
