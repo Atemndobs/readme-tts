@@ -1,3 +1,6 @@
+// Import storage module
+import { Storage } from './storage.ts';
+
 // Store the current highlight element and audio
 let currentHighlight = null;
 let miniPlayer = null;
@@ -311,6 +314,28 @@ function getFormattedSelection() {
   }
 }
 
+// Update highlight initialization
+async function initializeHighlight() {
+  try {
+    const settings = await Storage.getSettings();
+    if (settings.darkMode) {
+      document.body.classList.add('dark-mode');
+    }
+  } catch (error) {
+    console.error('Error initializing highlight:', error);
+  }
+}
+
+// Listen for storage changes
+Storage.onSettingsChanged((settings) => {
+  if (settings.darkMode !== document.body.classList.contains('dark-mode')) {
+    document.body.classList.toggle('dark-mode');
+  }
+});
+
+// Initialize highlight on load
+initializeHighlight();
+
 // Handle messages from the extension with context check
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (!isContextValid) {
@@ -367,6 +392,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Return true to indicate we'll send response asynchronously
   return true;
+});
+
+// Update text selection handling
+document.addEventListener('mouseup', async () => {
+  if (!isContextValid) return;
+
+  const selectedText = window.getSelection()?.toString()?.trim();
+  if (!selectedText) return;
+
+  try {
+    // Add selected text to queue
+    await Storage.addToQueue({
+      text: selectedText,
+      voice: (await Storage.getSettings()).voice,
+      status: 'pending'
+    });
+
+    // Show mini player if enabled
+    const settings = await Storage.getSettings();
+    if (settings.showMiniPlayer) {
+      showMiniPlayer(selectedText);
+    }
+  } catch (error) {
+    console.error('Error handling text selection:', error);
+  }
 });
 
 // Initialize highlight styles

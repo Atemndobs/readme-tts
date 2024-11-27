@@ -1,3 +1,6 @@
+// Import storage module
+import { Storage } from './storage.ts';
+
 // Store the floating window ID and tab ID
 let floatingWindowId = null;
 let floatingTabId = null;
@@ -14,9 +17,9 @@ const blobUrls = new Map();
 chrome.runtime.onInstalled.addListener(async () => {
   try {
     console.log('Extension installed/updated');
-    // Clear any existing state
-    await chrome.storage.local.clear();
-    injectedTabs.clear();
+    // Initialize storage with default settings
+    const settings = await Storage.getSettings();
+    await Storage.saveSettings(settings);
     
     // Create context menu
     await chrome.contextMenus.create({
@@ -335,10 +338,12 @@ async function createFloatingWindow(selectedText = '') {
       try {
         const existingWindow = await chrome.windows.get(floatingWindowId);
         // Update the selected text
-        await chrome.storage.local.set({ 
-          selectedText,
-          autoConvert: true
-        });
+        await Storage.saveQueue([{
+          text: selectedText,
+          voice: (await Storage.getSettings()).voice,
+          status: 'pending'
+        }]);
+        
         // Focus the existing window
         await chrome.windows.update(floatingWindowId, { focused: true });
         // Send message to the popup tab to update the text and convert
@@ -363,11 +368,12 @@ async function createFloatingWindow(selectedText = '') {
     const left = 20; // 20px padding from left edge of screen
     const top = 20;  // 20px padding from top edge of screen
     
-    // Store the selected text before creating the window
-    await chrome.storage.local.set({ 
-      selectedText,
-      autoConvert: true
-    });
+    // Store the selected text
+    await Storage.saveQueue([{
+      text: selectedText,
+      voice: (await Storage.getSettings()).voice,
+      status: 'pending'
+    }]);
     
     const window = await chrome.windows.create({
       url: chrome.runtime.getURL("popup.html?floating=true"),

@@ -6,14 +6,11 @@
   "permissions": [
     "storage",
     "contextMenus",
-    "activeTab",
-    "scripting",
     "tabs",
-    "notifications"
+    "activeTab"
   ],
   "host_permissions": [
-    "https://voice.cloud.atemkeng.de/*",
-    "<all_urls>"
+    "https://voice.cloud.atemkeng.de/*"
   ],
   "background": {
     "service_worker": "background.js",

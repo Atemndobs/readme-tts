@@ -9,6 +9,12 @@ let savedInputText = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
+// Import storage module
+import { Storage } from './storage.js';
+
+// Import settings
+import { defaultSettings } from './utils/settings.js';
+
 // DOM Elements
 let convertButton;
 let textInput;
@@ -92,7 +98,7 @@ async function populateVoices() {
   });
 
   // Load persisted settings
-  const settings = await loadSettings();
+  const settings = await Storage.getSettings();
 
   // If we have a persisted voice for this model, select it
   if (settings.voice && modelVoices.some((v) => v.id === settings.voice)) {
@@ -103,7 +109,7 @@ async function populateVoices() {
     if (firstVoice) {
       voiceSelect.value = firstVoice;
       settings.voice = firstVoice;
-      await saveSettings(settings);
+      await Storage.saveSettings(settings);
     }
   }
 }
@@ -180,7 +186,7 @@ async function updateVoiceOptions(model) {
   });
 
   // Load current settings
-  const settings = loadSettings();
+  const settings = await Storage.getSettings();
 
   // If we have a voice for this model, use it
   const voiceForModel = modelVoices.find((v) => v.id === settings.voice);
@@ -194,25 +200,24 @@ async function updateVoiceOptions(model) {
   // Save the updated settings
   settings.model = model;
   settings.voice = voiceSelect.value;
-  saveSettings(settings);
+  await Storage.saveSettings(settings);
   console.log("Saved settings after voice update:", settings);
 }
 
 // Function to initialize dark mode
-function initializeDarkMode() {
+async function initializeDarkMode() {
   if (!darkModeToggle) return;
 
-  const isDarkMode = localStorage.getItem("darkMode") === "enabled";
-  if (isDarkMode) {
+  const settings = await Storage.getSettings();
+  if (settings.darkMode) {
     document.body.classList.add("dark-mode");
   }
 
-  darkModeToggle.addEventListener("click", () => {
+  darkModeToggle.addEventListener("click", async () => {
     document.body.classList.toggle("dark-mode");
-    localStorage.setItem(
-      "darkMode",
-      document.body.classList.contains("dark-mode") ? "enabled" : "disabled"
-    );
+    await Storage.saveSettings({
+      darkMode: document.body.classList.contains("dark-mode")
+    });
   });
 }
 
@@ -343,7 +348,7 @@ async function getSelectedText() {
 async function convertTextToSpeech(text) {
   if (!text.trim()) return;
 
-  const settings = loadSettings();
+  const settings = await Storage.getSettings();
 
   try {
     if (!chrome.runtime?.id) {
@@ -781,27 +786,19 @@ function chunkText(text, maxChunkSize = 1000) {
 }
 
 // Settings management
-const defaultSettings = {
-  voice: "amy",
-  model: "voice-en-us-amy-low",
-};
-
 // Load settings from storage
-function loadSettings() {
-  const voice = localStorage.getItem("ttsVoice") || defaultSettings.voice;
-  const model = localStorage.getItem("ttsModel") || defaultSettings.model;
-  return { voice, model };
+async function loadSettings() {
+  return await Storage.getSettings();
 }
 
 // Save settings to storage
-function saveSettings(settings) {
-  localStorage.setItem("ttsVoice", settings.voice);
-  localStorage.setItem("ttsModel", settings.model);
+async function saveSettings(settings) {
+  await Storage.saveSettings(settings);
 }
 
 // Function to initialize settings
 async function initializeSettings() {
-  const settings = loadSettings();
+  const settings = await Storage.getSettings();
   const modelSelect = document.getElementById("modelSelect");
 
   if (modelSelect) {
@@ -813,7 +810,7 @@ async function initializeSettings() {
       const firstModel = modelSelect.options[0]?.value;
       if (firstModel) {
         settings.model = firstModel;
-        saveSettings(settings);
+        await Storage.saveSettings(settings);
       }
     }
   }
@@ -838,7 +835,7 @@ async function initializeSettings() {
       if (firstVoice) {
         settings.voice = firstVoice;
         voiceSelect.value = firstVoice;
-        saveSettings(settings);
+        await Storage.saveSettings(settings);
       }
     }
   }
@@ -846,7 +843,7 @@ async function initializeSettings() {
 
 // Apply settings to UI
 async function applySettings() {
-  const settings = loadSettings();
+  const settings = await Storage.getSettings();
   document.getElementById("modelSelect").value = settings.model;
   updateVoiceOptions(settings.model);
 
@@ -880,7 +877,7 @@ function updateLanguageDisplay(model) {
 // Settings modal handlers
 document.getElementById("settingsButton").addEventListener("click", () => {
   // Load current settings
-  const settings = loadSettings();
+  const settings = Storage.getSettings();
   console.log("Settings modal opened with settings:", settings);
 
   // Update model select
@@ -914,11 +911,9 @@ document.getElementById("modelSelect").addEventListener("change", (e) => {
   updateLanguageDisplay(e.target.value);
 });
 
-document.getElementById("voiceSelect").addEventListener("change", (e) => {
+document.getElementById("voiceSelect").addEventListener("change", async (e) => {
   console.log("Voice changed to:", e.target.value);
-  const settings = loadSettings();
-  settings.voice = e.target.value;
-  saveSettings(settings);
+  await Storage.saveSettings({ voice: e.target.value });
 });
 
 // Function to initialize popup
@@ -1030,7 +1025,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (toggleButton && textInputContainer) {
     // Load saved state or default to collapsed
-    const isCollapsed = localStorage.getItem("textInputCollapsed") !== "false"; // Default to true
+    const isCollapsed = Storage.getSettings().textInputCollapsed !== "false"; // Default to true
     if (isCollapsed) {
       toggleButton.classList.add("collapsed");
       textInputContainer.classList.add("collapsed");
@@ -1042,10 +1037,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       textInputContainer.classList.toggle("collapsed");
 
       // Save state
-      localStorage.setItem(
-        "textInputCollapsed",
-        textInputContainer.classList.contains("collapsed")
-      );
+      Storage.saveSettings({
+        textInputCollapsed: textInputContainer.classList.contains("collapsed")
+      });
     });
   }
 
@@ -1489,6 +1483,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Add message listener
   chrome.runtime.onMessage.addListener(messageListener);
 
+  // Initialize sync status component
+  const syncStatus = document.querySelector('sync-status');
+  if (syncStatus) {
+    // Listen for sync status changes
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'syncStatusUpdate') {
+        syncStatus.setAttribute('status', message.status);
+        if (message.error) {
+          syncStatus.setAttribute('error', message.error);
+        } else {
+          syncStatus.removeAttribute('error');
+        }
+      }
+    });
+
+    // Request initial sync status
+    chrome.runtime.sendMessage({ type: 'getSyncStatus' }, (response) => {
+      if (response) {
+        syncStatus.setAttribute('status', response.status);
+        if (response.error) {
+          syncStatus.setAttribute('error', response.error);
+        }
+      }
+    });
+  }
+
   // Clean up on window unload
   window.addEventListener("unload", () => {
     // Remove event listeners
@@ -1516,6 +1536,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initializeSettings();
   const settings = await loadSettings();
   updateLanguageDisplay(settings.model);
+});
+
+Storage.onSettingsChanged((settings) => {
+  // Update UI when settings change from other contexts
+  if (settings.darkMode !== document.body.classList.contains("dark-mode")) {
+    document.body.classList.toggle("dark-mode");
+  }
+  
+  const voiceSelect = document.getElementById("voiceSelect");
+  const modelSelect = document.getElementById("modelSelect");
+  
+  if (modelSelect && settings.model !== modelSelect.value) {
+    modelSelect.value = settings.model;
+    updateVoiceOptions(settings.model);
+  }
+  
+  if (voiceSelect && settings.voice !== voiceSelect.value) {
+    voiceSelect.value = settings.voice;
+  }
 });
 
 function hideUrlInputGroup() {

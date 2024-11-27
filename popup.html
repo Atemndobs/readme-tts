@@ -9,116 +9,127 @@
 </head>
 
 <body>
-  <div class="input-container">
-    <div class="settings-controls">
-      <button title="Toggle Dark Mode" id="darkModeToggle">
-        <i class="fa-solid fa-circle-half-stroke"></i>
-      </button>
-      <span id="currentLanguage" class="language-display" title="Current Language"></span>
-    </div>
-    <button title="Open Settings Menu" id="settingsButton">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    </button>
-    <button title="Refresh Page" id="refreshButton">
-      <i class="fa-solid fa-arrows-rotate"></i>
-    </button>
-    <button title="Close Window" id="closeButton">
-      <i class="fa-solid fa-xmark"></i>
-    </button>
-    <button title="Open in Floating Window" id="openInFloatingWindow">
-      <i class="fa-solid fa-up-right-from-square"></i>
-    </button>
-  </div>
-
-  <div class="page-url-group" id="pageUrlGroup" hidden>
-    <div class="url-input-group">
-      <input type="url" id="pageUrlInput" placeholder="Enter webpage URL" hidden/>
-    </div>
-  </div>
-
-  <div id="textInputContainer" class="text-input-container">
-    <textarea id="textInput" placeholder="Enter text here"></textarea>
-    <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
-  </div>
-  <div id="message" hidden></div>
-  
-  <!-- Custom Audio Player -->
-  <div id="audioPlayerContainer" class="audio-player-container">
-    <div class="audio-top-bar">
-      <button id="toggleTextInput" title="Toggle Text Input" class="toggle-button">
-        <i class="fa-solid fa-chevron-up"></i>
-        View text
-      </button>
-      <button id="convertPageButton" class="action-button" title="Convert Webpage to Speech">
-        Read Page
-        <i class="fa-solid fa-book-open-reader"></i>
-      </button>
-    </div>
-    <div class="navigation-controls">
-      <button id="prevAudio" class="nav-button" title="Previous Audio Paragraph">
-        <i class="fa-solid fa-backward"></i>
-      </button>
-      
-      <div class="circular-player">
-        <svg class="progress-ring" width="60" height="60">
-          <circle class="progress-ring-circle-bg" cx="30" cy="30" r="26"/>
-          <circle class="progress-ring-circle" cx="30" cy="30" r="26"/>
-        </svg>
-        <button id="playPauseButton" class="play-button" title="Play/Pause Audio">
-          <i class="fa-solid fa-play"></i>
+  <div class="container">
+    <div class="header">
+      <div class="header-left">
+        <img src="icon/icons8-voice-recognition-48.png" alt="README-TTS" width="24" height="24">
+        <span id="currentLanguage" class="language-display" title="Current Language"></span>
+        <!-- <h1>README-TTS</h1> -->
+      </div>
+      <div class="header-right">
+        <sync-status></sync-status>
+        <button id="settingsButton" class="icon-button" title="Settings">
+          <i class="fas fa-cog"></i>
         </button>
       </div>
+    </div>
 
-      <button id="nextAudio" class="nav-button" title="Next Audio Chunk">
-        <i class="fa-solid fa-forward"></i>
+    <div class="input-container">
+      <div class="settings-controls">
+        <button title="Toggle Dark Mode" id="darkModeToggle">
+          <i class="fa-solid fa-circle-half-stroke"></i>
+        </button>
+
+      </div>
+      <button title="Refresh Page" id="refreshButton">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
+      <button title="Close Window" id="closeButton">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <button title="Open in Floating Window" id="openInFloatingWindow">
+        <i class="fa-solid fa-up-right-from-square"></i>
       </button>
     </div>
+
+    <div class="page-url-group" id="pageUrlGroup" hidden>
+      <div class="url-input-group">
+        <input type="url" id="pageUrlInput" placeholder="Enter webpage URL" hidden/>
+      </div>
+    </div>
+
+    <div id="textInputContainer" class="text-input-container">
+      <textarea id="textInput" placeholder="Enter text here"></textarea>
+      <button id="convertButton" title="Convert Text to Speech" hidden>Convert to Speech</button>
+    </div>
+    <div id="message" hidden></div>
     
-    <div class="audio-info">
-      <div id="currentAudioText" class="text-preview"></div>
-      <div class="audio-progress">
-        <span id="currentTime">0:00</span>
-        <span class="separator">/</span>
-        <span id="duration">0:00</span>
-        <span class="chunk-info">
-          (Part <span id="currentChunk">0</span>/<span id="totalChunks">0</span>)
-        </span>
+    <!-- Custom Audio Player -->
+    <div id="audioPlayerContainer" class="audio-player-container">
+      <div class="audio-top-bar">
+        <button id="toggleTextInput" title="Toggle Text Input" class="toggle-button">
+          <i class="fa-solid fa-chevron-up"></i>
+          View text
+        </button>
+        <button id="convertPageButton" class="action-button" title="Convert Webpage to Speech">
+          Read Page
+          <i class="fa-solid fa-book-open-reader"></i>
+        </button>
+      </div>
+      <div class="navigation-controls">
+        <button id="prevAudio" class="nav-button" title="Previous Audio Paragraph">
+          <i class="fa-solid fa-backward"></i>
+        </button>
+        
+        <div class="circular-player">
+          <svg class="progress-ring" width="60" height="60">
+            <circle class="progress-ring-circle-bg" cx="30" cy="30" r="26"/>
+            <circle class="progress-ring-circle" cx="30" cy="30" r="26"/>
+          </svg>
+          <button id="playPauseButton" class="play-button" title="Play/Pause Audio">
+            <i class="fa-solid fa-play"></i>
+          </button>
+        </div>
+
+        <button id="nextAudio" class="nav-button" title="Next Audio Chunk">
+          <i class="fa-solid fa-forward"></i>
+        </button>
+      </div>
+      
+      <div class="audio-info">
+        <div id="currentAudioText" class="text-preview"></div>
+        <div class="audio-progress">
+          <span id="currentTime">0:00</span>
+          <span class="separator">/</span>
+          <span id="duration">0:00</span>
+          <span class="chunk-info">
+            (Part <span id="currentChunk">0</span>/<span id="totalChunks">0</span>)
+          </span>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Hidden container for storing audio elements -->
-  <div id="audioContainer" class="audio-container"></div>
+    <!-- Hidden container for storing audio elements -->
+    <div id="audioContainer" class="audio-container"></div>
 
-  <!-- Settings Modal -->
-  <div id="settingsModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div class="modal-title">Settings</div>
-        <button class="close-button" id="closeSettings" title="Close Settings">✕</button>
-      </div>
-      <div class="settings-group">
-        <label class="settings-label" for="modelSelect">Language</label>
-        <select id="modelSelect">
-          <option value="voice-en-us">English (US)</option>
-          <option value="voice-en-gb">English (GB)</option>
-          <option value="voice-de">German (DE)</option>
-          <option value="voice-it">Italian</option>
-          <option value="voice-fr">French</option>
-          <option value="voice-es">Spanish (ES)</option>
-        </select>
-      </div>
-      <div class="settings-group">
-        <label class="settings-label" for="voiceSelect">Voice</label>
-        <select id="voiceSelect"></select>
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title">Settings</div>
+          <button class="close-button" id="closeSettings" title="Close Settings">✕</button>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" for="modelSelect">Language</label>
+          <select id="modelSelect">
+            <option value="voice-en-us">English (US)</option>
+            <option value="voice-en-gb">English (GB)</option>
+            <option value="voice-de">German (DE)</option>
+            <option value="voice-it">Italian</option>
+            <option value="voice-fr">French</option>
+            <option value="voice-es">Spanish (ES)</option>
+          </select>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" for="voiceSelect">Voice</label>
+          <select id="voiceSelect"></select>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="popup.js"></script>
+    <script type="module" src="components/sync-status.js"></script>
+    <script type="module" src="popup.js"></script>
+  </div>
 </body>
 
 </html>

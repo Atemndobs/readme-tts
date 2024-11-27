@@ -575,17 +575,59 @@ audio {
   text-align: center;
 }
 
-/* Audio player top bar */
-/* .audio-top-bar {
+/* Header Styles */
+.header {
   display: flex;
-  justify-content: center;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.dark-mode .audio-top-bar {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-} */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sync-container {
+  margin-left: auto;
+}
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.icon-button:hover {
+  background: var(--hover-bg);
+}
+
+.icon-button i {
+  font-size: 16px;
+}
+
+.settings-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 /* Highlight styles */
 .tts-highlight {
@@ -718,36 +760,21 @@ select {
   color: #f3f4f6;
 }
 
-/* Settings controls */
-/* .settings-controls {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-} */
-
-/* .language-display {
-  font-size: 12px;
-  font-weight: bold;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--background-secondary);
-  color: var(--text-primary);
-  min-width: 24px;
-  text-align: center;
-} */
-
 
 .language-display {
-  position: absolute;
-  top: 30px;
-  left: 6%;
   display: flex;
   align-items: center;
   gap: 8px;
   color: #999;
+  border-radius: 4px;
+  background: var(--hover-bg);
+  font-size: 12px;
+  font-weight: 500;
+  /* padding: 4px 8px; */
+  /* position: absolute; */
+  /* top: 30px; */
+  /* left: 6%; */
+
 }
 
 /* Refresh button styling */
