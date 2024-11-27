@@ -15,21 +15,185 @@ import { Storage } from './storage.js';
 // Import settings
 import { defaultSettings } from './utils/settings.js';
 
-// DOM Elements
-let convertButton;
-let textInput;
-let closeButton;
-let voiceSelect;
+// Initialize UI elements
 let modelSelect;
+let voiceSelect;
 let darkModeToggle;
-let messageDiv;
-let speakButton;
-let selectionStatus;
-let urlInput;
-let convertPageButton;
+let textInput;
+let convertButton;
+let closeButton;
 let openInFloatingWindow;
 let openInApp;
+let settingsButton;
+let settingsPanel;
+let languageDisplay;
+let syncStatus;
+let toggleButton;
+let textInputContainer;
 let refreshButton;
+
+// Function to initialize UI elements
+function initializeUIElements() {
+  try {
+    // Get all UI elements
+    modelSelect = document.getElementById("modelSelect");
+    voiceSelect = document.getElementById("voiceSelect");
+    darkModeToggle = document.getElementById("darkModeToggle");
+    textInput = document.getElementById("textInput");
+    convertButton = document.getElementById("convertButton");
+    closeButton = document.getElementById("closeButton");
+    openInFloatingWindow = document.getElementById("openInFloatingWindow");
+    openInApp = document.getElementById("openInApp");
+    settingsButton = document.getElementById("settingsButton");
+    settingsPanel = document.getElementById("settingsPanel");
+    languageDisplay = document.getElementById("currentLanguage");
+    syncStatus = document.querySelector('sync-status');
+    toggleButton = document.getElementById("toggleTextInput");
+    textInputContainer = document.getElementById("textInputContainer");
+    refreshButton = document.getElementById("refreshButton");
+
+    // Initialize close button
+    if (closeButton) {
+      closeButton.addEventListener("click", () => {
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+        audioQueue = [];
+        isProcessingQueue = false;
+        window.close();
+      });
+    }
+
+    // Initialize floating window button
+    if (openInFloatingWindow) {
+      openInFloatingWindow.addEventListener("click", () => {
+        chrome.windows.create({
+          url: chrome.runtime.getURL("popup.html") + "?floating=true",
+          type: "popup",
+          width: 480,
+          height: 420,
+          left: 20,
+          top: 20,
+          focused: true
+        }, (window) => {
+          if (chrome.runtime.lastError) {
+            console.error('Error creating window:', chrome.runtime.lastError);
+            return;
+          }
+          // Close the current popup
+          window.close();
+        });
+      });
+    }
+
+    // Initialize app button
+    if (openInApp) {
+      openInApp.addEventListener("click", () => {
+        chrome.tabs.create({ url: "https://tts.cloud.atemkeng.de/" }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('Error opening app:', chrome.runtime.lastError);
+            return;
+          }
+          window.close();
+        });
+      });
+    }
+
+    // Initialize refresh button
+    if (refreshButton) {
+      refreshButton.addEventListener("click", () => {
+        refreshButton.querySelector("i").classList.add("fa-spin");
+        setTimeout(() => {
+          window.location.reload();
+        }, 300);
+      });
+    }
+
+    // Initialize text input toggle
+    if (toggleButton && textInputContainer) {
+      const initializeTextInputState = async () => {
+        try {
+          const settings = await Storage.getSettings();
+          if (settings.textInputHidden) {
+            textInputContainer.classList.add('hidden');
+          }
+        } catch (error) {
+          console.error('Error initializing text input state:', error);
+        }
+      };
+
+      toggleButton.addEventListener('click', async () => {
+        try {
+          textInputContainer.classList.toggle('hidden');
+          const settings = await Storage.getSettings();
+          settings.textInputHidden = textInputContainer.classList.contains('hidden');
+          await Storage.saveSettings(settings);
+        } catch (error) {
+          console.error('Error toggling text input:', error);
+        }
+      });
+
+      // Initialize text input state
+      initializeTextInputState();
+    }
+
+    // Initialize sync status
+    if (syncStatus) {
+      // Listen for sync status changes
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.type === 'syncStatusUpdate') {
+          syncStatus.setAttribute('status', message.status);
+          if (message.error) {
+            syncStatus.setAttribute('error', message.error);
+          } else {
+            syncStatus.removeAttribute('error');
+          }
+        }
+      });
+
+      // Request initial sync status
+      chrome.runtime.sendMessage({ type: 'getSyncStatus' }, (response) => {
+        if (response) {
+          syncStatus.setAttribute('status', response.status);
+          if (response.error) {
+            syncStatus.setAttribute('error', response.error);
+          }
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error("Error initializing UI elements:", error);
+  }
+}
+
+// Function to open floating window
+async function openFloatingWindow(text = '') {
+  try {
+    // Get current settings
+    const settings = await Storage.getSettings();
+    
+    // Create floating window data
+    const windowData = {
+      action: "createFloatingWindow",
+      selectedText: text,
+      settings: settings
+    };
+
+    // Send message to background script
+    const response = await chrome.runtime.sendMessage(windowData);
+    
+    if (!response || response.error) {
+      throw new Error(response?.error || 'Failed to create floating window');
+    }
+
+    // Close current popup
+    window.close();
+  } catch (error) {
+    console.error('Error creating floating window:', error);
+  }
+}
 
 // Model to voices mapping
 const modelToVoices = {
@@ -142,9 +306,8 @@ function updateLanguageOptions() {
 }
 
 // Function to update voice options based on selected model
-async function updateVoiceOptions(model) {
-  const voiceSelect = document.getElementById("voiceSelect");
-  if (!voiceSelect) return;
+async function updateVoiceOptions(model, skipSave = false) {
+  if (!voiceSelect || !model) return;
 
   console.log("Updating voice options for model:", model);
 
@@ -198,27 +361,103 @@ async function updateVoiceOptions(model) {
     voiceSelect.value = modelVoices[0].id;
   }
 
-  // Save the updated settings
+  // Update settings without saving immediately
   settings.model = model;
   settings.voice = voiceSelect.value;
-  await Storage.saveSettings(settings);
-  console.log("Saved settings after voice update:", settings);
+  
+  // Update display
+  await updateLanguageDisplay(model);
+  
+  // Only save if not skipping save (to prevent infinite loops)
+  if (!skipSave) {
+    await Storage.saveSettings(settings);
+  }
+}
+
+// Function to update language display
+async function updateLanguageDisplay(model) {
+  if (!languageDisplay || !model) return;
+
+  // Extract language code from model name
+  const languageMap = {
+    en: "EN",
+    de: "DE",
+    es: "ES",
+    fr: "FR",
+    it: "IT",
+  };
+
+  const langCode = model.split("-")[1]?.toLowerCase() || "en";
+  const settings = await Storage.getSettings();
+  
+  // Get the voice name from the voice ID
+  const voiceName = settings.voice?.split("-").pop() || "";
+  // Capitalize first letter if we have a voice name
+  const displayVoice = voiceName ? voiceName.charAt(0).toUpperCase() + voiceName.slice(1) : "";
+  
+  // Display language and voice
+  languageDisplay.textContent = `${languageMap[langCode]}${displayVoice ? `: ${displayVoice}` : ""}`;
 }
 
 // Function to initialize dark mode
-async function initializeDarkMode() {
-  if (!darkModeToggle) return;
+  async function initializeDarkMode() {
+    if (!darkModeToggle) return;
 
-  const settings = await Storage.getSettings();
-  if (settings.darkMode) {
-    document.body.classList.add("dark-mode");
+    try {
+      // Load initial dark mode state
+      const currentSettings = await Storage.getSettings();
+      if (currentSettings.darkMode) {
+        document.body.classList.toggle("dark-mode", currentSettings.darkMode);
+
+      }
+
+      // Add click handler for dark mode toggle
+      darkModeToggle.addEventListener("click", async () => {
+        try {
+          console.log("Dark mode toggle clicked");
+          // Toggle dark mode class
+          const isDarkMode = document.body.classList.toggle("dark-mode");
+          console.log("Dark mode class toggled", isDarkMode);
+          
+          // Update settings with new dark mode state
+          const settings = await Storage.getSettings();
+          settings.darkMode = isDarkMode;
+          console.log("Before saving, darkMode state:", settings.darkMode);
+          await Storage.saveSettings(settings);
+          console.log("Dark mode setting saved", settings.darkMode);
+
+          document.body.classList.toggle("dark-mode", settings.darkMode);
+          console.log("Dark mode toggle successfully");
+          
+        } catch (error) {
+          console.error("Error toggling dark mode:", error);
+        }
+      });
+    } catch (error) {
+      console.error("Error initializing dark mode:", error);
+    }
   }
 
-  darkModeToggle.addEventListener("click", async () => {
-    document.body.classList.toggle("dark-mode");
-    await Storage.saveSettings({
-      darkMode: document.body.classList.contains("dark-mode")
-    });
+
+// Function to initialize text input toggle
+async function initializeTextInputToggle() {
+  if (!toggleButton || !textInputContainer) return;
+
+  const settings = await Storage.getSettings();
+  const isCollapsed = settings.textInputCollapsed !== false; // Default to true if not set
+  
+  if (isCollapsed) {
+    toggleButton.classList.add("collapsed");
+    textInputContainer.classList.add("collapsed");
+  }
+
+  toggleButton.addEventListener("click", async () => {
+    toggleButton.classList.toggle("collapsed");
+    textInputContainer.classList.toggle("collapsed");
+
+    const settings = await Storage.getSettings();
+    settings.textInputCollapsed = textInputContainer.classList.contains("collapsed");
+    await Storage.saveSettings(settings);
   });
 }
 
@@ -712,7 +951,7 @@ async function handleWebPageConversion(chunks, totalChunks) {
   showMessage("Page conversion completed!", "success");
   setTimeout(() => {
     if (messageDiv) {
-      messageDiv.textContent = "";
+      messageDiv.textContent = '';
       messageDiv.className = "";
     }
   }, 3000);
@@ -757,7 +996,9 @@ function chunkText(text, maxChunkSize = 1000) {
       // Check if line is a heading/title
       const isHeading =
         /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
-        /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(trimmedLine) || // Numbered headings
+        /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(
+          trimmedLine
+        ) || // Numbered headings
         (trimmedLine.length < 100 &&
           !/[.!?:,;]$/.test(trimmedLine) &&
           /^[A-Z]/.test(trimmedLine)) || // Short title-like lines
@@ -799,7 +1040,9 @@ async function saveSettings(settings) {
 
 // Function to initialize settings
 async function initializeSettings() {
+  console.log("Initializing settings with dark mode:");
   const settings = await Storage.getSettings();
+  console.log(settings);
   const modelSelect = document.getElementById("modelSelect");
 
   if (modelSelect) {
@@ -840,11 +1083,15 @@ async function initializeSettings() {
       }
     }
   }
+
+  console.log("Settings initialized with dark mode:", settings.darkMode);
 }
 
 // Apply settings to UI
 async function applySettings() {
+  console.log("Applying settings with dark mode:");
   const settings = await Storage.getSettings();
+  console.log(settings);
   document.getElementById("modelSelect").value = settings.model;
   updateVoiceOptions(settings.model);
 
@@ -857,718 +1104,106 @@ async function applySettings() {
   }, 100);
 }
 
-// Function to update language display
-function updateLanguageDisplay(model) {
-  const languageDisplay = document.getElementById("currentLanguage");
-  if (!languageDisplay) return;
-
-  // Extract language code from model name
-  const languageMap = {
-    en: "EN",
-    de: "DE",
-    es: "ES",
-    fr: "FR",
-    it: "IT",
-  };
-
-  const langCode = model.split("-")[1]?.toLowerCase() || "en";
-  languageDisplay.textContent = languageMap[langCode] || "EN";
-}
-
-// Settings modal handlers
-document.getElementById("settingsButton").addEventListener("click", () => {
-  // Load current settings
-  const settings = Storage.getSettings();
-  console.log("Settings modal opened with settings:", settings);
-
-  // Update model select
-  const modelSelect = document.getElementById("modelSelect");
-  if (modelSelect) {
-    modelSelect.value = settings.model;
+// Add settings change listener
+Storage.addListener(async (settings) => {
+  try {
+    // Update voice options without saving to prevent infinite loop
+    await updateVoiceOptions(settings.model, true);
+    
+    // Update dark mode
+    if (settings.darkMode) {
+      document.body.classList.add("dark-mode");
+    } else {
+      document.body.classList.remove("dark-mode");
+    }
+  } catch (error) {
+    console.error("Error in settings change listener:", error);
   }
-
-  // Update voice options and select current voice
-  updateVoiceOptions(settings.model);
-
-  // Show modal
-  document.getElementById("settingsModal").style.display = "block";
-});
-
-document.getElementById("closeSettings").addEventListener("click", () => {
-  document.getElementById("settingsModal").style.display = "none";
-});
-
-// Close modal when clicking outside
-document.getElementById("settingsModal").addEventListener("click", (e) => {
-  if (e.target === document.getElementById("settingsModal")) {
-    document.getElementById("settingsModal").style.display = "none";
-  }
-});
-
-// Save settings when changed
-document.getElementById("modelSelect").addEventListener("change", (e) => {
-  console.log("Model changed to:", e.target.value);
-  updateVoiceOptions(e.target.value);
-  updateLanguageDisplay(e.target.value);
-});
-
-document.getElementById("voiceSelect").addEventListener("change", async (e) => {
-  console.log("Voice changed to:", e.target.value);
-  await Storage.saveSettings({ voice: e.target.value });
 });
 
 // Function to initialize popup
 document.addEventListener("DOMContentLoaded", async () => {
-  // Check if this is a floating window
-  const urlParams = new URLSearchParams(window.location.search);
-  const isFloatingWindow = urlParams.get("floating") === "true";
-
-  // Initialize DOM elements
-  convertButton = document.getElementById("convertButton");
-  textInput = document.getElementById("textInput");
-  closeButton = document.getElementById("closeButton");
-  voiceSelect = document.getElementById("voiceSelect");
-  modelSelect = document.getElementById("modelSelect");
-  darkModeToggle = document.getElementById("darkModeToggle");
-  messageDiv = document.getElementById("message");
-  speakButton = document.getElementById("speakButton");
-  selectionStatus = document.getElementById("selectionStatus");
-  urlInput = document.getElementById("pageUrlInput");
-  convertPageButton = document.getElementById("convertPageButton");
-  openInFloatingWindow = document.getElementById("openInFloatingWindow");
-  openInApp = document.getElementById("openInApp");
-  refreshButton = document.getElementById("refreshButton");
-
-  // Initialize player controls
-  const playPauseButton = document.getElementById("playPauseButton");
-  const prevButton = document.getElementById("prevAudio");
-  const nextButton = document.getElementById("nextAudio");
-
-  // Play/Pause button click handler
-  if (playPauseButton) {
-    playPauseButton.addEventListener("click", () => {
-      if (!currentAudio) {
-        // If no audio is playing, start playing the first one in queue
-        if (audioQueue.length > 0) {
-          const firstAudio = audioQueue[0];
-          firstAudio.audio.play();
-          currentAudio = firstAudio.audio;
-          updatePlayerUI(firstAudio);
-        }
-      } else {
-        if (currentAudio.paused) {
-          currentAudio.play();
-        } else {
-          currentAudio.pause();
-        }
-        // Find current audio entry and update UI
-        const currentEntry = audioQueue.find(
-          (entry) => entry.audio === currentAudio
-        );
-        if (currentEntry) {
-          updatePlayerUI(currentEntry);
-        }
-      }
-    });
-  }
-
-  // Previous button click handler
-  if (prevButton) {
-    prevButton.addEventListener("click", () => {
-      if (currentAudio && audioQueue.length > 0) {
-        const currentIndex = audioQueue.findIndex(
-          (entry) => entry.audio === currentAudio
-        );
-        if (currentIndex > 0) {
-          currentAudio.pause();
-          const prevEntry = audioQueue[currentIndex - 1];
-          currentAudio = prevEntry.audio;
-          currentAudio.play();
-          updatePlayerUI(prevEntry);
-        }
-      }
-    });
-  }
-
-  // Next button click handler
-  if (nextButton) {
-    nextButton.addEventListener("click", () => {
-      if (currentAudio && audioQueue.length > 0) {
-        const currentIndex = audioQueue.findIndex(
-          (entry) => entry.audio === currentAudio
-        );
-        if (currentIndex < audioQueue.length - 1) {
-          currentAudio.pause();
-          const nextEntry = audioQueue[currentIndex + 1];
-          currentAudio = nextEntry.audio;
-          currentAudio.play();
-          updatePlayerUI(nextEntry);
-        }
-      }
-    });
-  }
-
-  // Initialize refresh button handler
-  if (refreshButton) {
-    refreshButton.addEventListener("click", () => {
-      // Add spinning animation class
-      refreshButton.querySelector("i").classList.add("fa-spin");
-
-      // Reload the page after a brief delay to show the animation
-      setTimeout(() => {
-        window.location.reload();
-      }, 300);
-    });
-  }
-
-  // Initialize text input toggle
-  const toggleButton = document.getElementById("toggleTextInput");
-  const textInputContainer = document.getElementById("textInputContainer");
-
-  if (toggleButton && textInputContainer) {
-    // Load saved state or default to collapsed
-    const isCollapsed = Storage.getSettings().textInputCollapsed !== "false"; // Default to true
-    if (isCollapsed) {
-      toggleButton.classList.add("collapsed");
-      textInputContainer.classList.add("collapsed");
-    }
-
-    toggleButton.addEventListener("click", () => {
-      // Toggle collapsed state
-      toggleButton.classList.toggle("collapsed");
-      textInputContainer.classList.toggle("collapsed");
-
-      // Save state
-      Storage.saveSettings({
-        textInputCollapsed: textInputContainer.classList.contains("collapsed")
-      });
-    });
-  }
-
-  // Initialize dark mode
-  initializeDarkMode();
-
-  // Initialize voices
-  if (modelSelect) {
-    modelSelect.addEventListener("change", populateVoices);
-    populateVoices(); // Initial population
-  }
-
-  // Initialize text input handlers
-  if (textInput) {
-    textInput.addEventListener("input", () => {
-      if (convertButton) {
-        // Show/hide button based on text content
-        convertButton.hidden = !textInput.value.trim();
-      }
-    });
-  }
-
-  // Initialize convert button
-  if (convertButton) {
-    convertButton.addEventListener("click", async () => {
-      if (textInput?.value) {
-        const input = textInput.value;
-        try {
-          // Update button to show processing
-          convertButton.disabled = true;
-          convertButton.textContent = "Processing text...";
-
-          // Split text into paragraphs and headings
-          const normalizedText = input
-            .replace(/\r\n/g, "\n")
-            .replace(/[\t ]+\n/g, "\n");
-
-          // Split into initial segments
-          const segments = normalizedText.split(/\n\s*\n+/);
-
-          // Process each segment and detect headings
-          const chunks = [];
-          for (const segment of segments) {
-            const lines = segment.split("\n");
-            let currentParagraph = [];
-
-            for (const line of lines) {
-              const trimmedLine = line.trim();
-              if (!trimmedLine) continue;
-
-              // Check if line is a heading/title
-              const isHeading =
-                /^#{1,6}\s+/.test(trimmedLine) || // Markdown headings
-                /^(?:[0-9A-Z][.)]\s+|[0-9]+[.)][0-9.]*[.)]\s+)/i.test(
-                  trimmedLine
-                ) || // Numbered headings
-                (trimmedLine.length < 100 &&
-                  !/[.!?:,;]$/.test(trimmedLine) &&
-                  /^[A-Z]/.test(trimmedLine)) || // Short title-like lines
-                (trimmedLine.toUpperCase() === trimmedLine &&
-                  trimmedLine.length < 100); // ALL CAPS lines
-
-              if (isHeading) {
-                if (currentParagraph.length > 0) {
-                  chunks.push(
-                    currentParagraph.join(" ").replace(/\s+/g, " ").trim()
-                  );
-                  currentParagraph = [];
-                }
-                chunks.push(trimmedLine);
-              } else {
-                currentParagraph.push(trimmedLine);
-              }
-            }
-
-            if (currentParagraph.length > 0) {
-              chunks.push(
-                currentParagraph.join(" ").replace(/\s+/g, " ").trim()
-              );
-            }
-          }
-
-          const finalChunks = chunks.filter((chunk) => chunk.length > 0);
-
-          console.log("Created chunks:", finalChunks.length);
-
-          // Reset audio queue
-          audioQueue = [];
-
-          // Clear audio container
-          const audioContainer = document.getElementById("audioContainer");
-          if (audioContainer) {
-            audioContainer.innerHTML = "";
-          }
-
-          // Update UI to show initial state
-          updatePlayerUI(null);
-
-          // Process chunks
-          for (let i = 0; i < finalChunks.length; i++) {
-            convertButton.textContent = `Converting ${
-              i + 1}/${finalChunks.length}...`;
-            try {
-              await convertTextToSpeech(finalChunks[i]);
-            } catch (error) {
-              console.error(
-                `Error converting chunk ${i}:`,
-                error
-              );
-              convertButton.textContent = `Error in chunk ${i + 1}: ${
-                error.message
-              }`;
-              await new Promise((resolve) => setTimeout(resolve, 2000)); // Show error for 2 seconds
-            }
-          }
-
-          // Reset button state with success message
-          convertButton.textContent = "Conversion Complete!";
-          setTimeout(() => {
-            convertButton.disabled = false;
-            convertButton.textContent = "Convert to Speech";
-            convertButton.hidden = true; // Hide the button after conversion
-          }, 2000);
-        } catch (error) {
-          console.error("Error processing text:", error);
-          convertButton.textContent = `Error: ${
-            error.message || "Unknown error"
-          }`;
-          setTimeout(() => {
-            convertButton.disabled = false;
-            convertButton.textContent = "Convert to Speech";
-          }, 2000);
-        }
-      }
-    });
-  }
-
-  // Initialize close button
-  if (closeButton) {
-    closeButton.addEventListener("click", () => {
-      // Clean up audio resources
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
-      }
-      audioQueue = [];
-      isProcessingQueue = false;
-      window.close();
-    });
-  }
-
-  // Check for stored selected text
-  chrome.storage.local.get(
-    ["selectedText", "autoConvert"],
-    async function (result) {
-      if (result.selectedText && textInput) {
-        // Preserve the original text with formatting
-        textInput.value = result.selectedText;
-        if (convertButton) {
-          convertButton.disabled = false;
-        }
-
-        if (result.autoConvert) {
-          // Chunk the text while preserving formatting
-          const chunks = chunkText(result.selectedText);
-          console.log("Processing chunks:", chunks.length);
-
-          // Process each chunk
-          for (let i = 0; i < chunks.length; i++) {
-            updateChunkDisplay(i + 1, chunks.length);
-            await convertTextToSpeech(chunks[i]);
-          }
-
-          // Reset chunk display
-          updateChunkDisplay(0, 0);
-        }
-
-        // Clear the stored data
-        chrome.storage.local.remove(["selectedText", "autoConvert"]);
-      }
-    }
-  );
-
-  // Initialize page URL conversion
-  if (convertPageButton) {
-    convertPageButton.addEventListener("click", async () => {
-      const messageDiv = document.getElementById("message");
-      const urlInput = document.getElementById("pageUrlInput");
-      const urlInputGroup = document.querySelector(".url-input-group");
-
-      try {
-        let tab;
-        let url = urlInput?.value?.trim();
-
-        // Validate URL if provided
-        if (url) {
-          try {
-            url = new URL(url).href;
-          } catch (e) {
-            throw new Error("Invalid URL format");
-          }
-
-          if (!isValidUrl(url)) {
-            throw new Error("Cannot access this type of URL");
-          }
-
-          // Create a new tab with the URL
-          tab = await chrome.tabs.create({ url, active: false });
-
-          // Wait for the page to load
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(
-              () => reject(new Error("Page load timeout")),
-              30000
-            );
-
-            chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-              if (tabId === tab.id && info.status === "complete") {
-                chrome.tabs.onUpdated.removeListener(listener);
-                clearTimeout(timeout);
-                resolve();
-              }
-            });
-          });
-        } else {
-          // Get the active tab if no URL is provided
-          [tab] = await chrome.tabs.query({
-            active: true,
-            currentWindow: true,
-          });
-          if (!tab?.url || !isValidUrl(tab.url)) {
-            throw new Error("Cannot access this page type");
-          }
-        }
-
-        if (!tab?.id) {
-          throw new Error("No valid tab found");
-        }
-
-        // Extract text from the webpage
-        const [result] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            const walker = document.createTreeWalker(
-              document.body,
-              NodeFilter.SHOW_TEXT,
-              {
-                acceptNode: function (node) {
-                  if (
-                    !node.parentElement ||
-                    node.parentElement.offsetParent === null
-                  ) {
-                    return NodeFilter.FILTER_REJECT;
-                  }
-                  if (
-                    ["SCRIPT", "STYLE", "NOSCRIPT"].includes(
-                      node.parentElement.tagName
-                    )
-                  ) {
-                    return NodeFilter.FILTER_REJECT;
-                  }
-                  return node.textContent.trim()
-                    ? NodeFilter.FILTER_ACCEPT
-                    : NodeFilter.FILTER_REJECT;
-                },
-              }
-            );
-
-            const paragraphs = [];
-            let currentParagraph = [];
-            let node;
-
-            while ((node = walker.nextNode())) {
-              const text = node.textContent.trim();
-              if (text) {
-                const isEndOfParagraph =
-                  [
-                    "P",
-                    "DIV",
-                    "H1",
-                    "H2",
-                    "H3",
-                    "H4",
-                    "H5",
-                    "H6",
-                    "LI",
-                  ].includes(node.parentElement.tagName) ||
-                  node.parentElement.nextElementSibling?.style.display ===
-                    "block" ||
-                  text.endsWith(".") ||
-                  text.endsWith("!") ||
-                  text.endsWith("?");
-
-                currentParagraph.push(text);
-
-                if (isEndOfParagraph && currentParagraph.length > 0) {
-                  paragraphs.push(currentParagraph.join(" "));
-                  currentParagraph = [];
-                }
-              }
-            }
-
-            if (currentParagraph.length > 0) {
-              paragraphs.push(currentParagraph.join(" "));
-            }
-
-            return paragraphs
-              .filter((p) => p.trim().split(/\s+/).length > 3)
-              .map((p) => p.replace(/\s+/g, " ").trim());
-          },
-        });
-
-        // Close the tab if we created it from URL input
-        if (url) {
-          chrome.tabs.remove(tab.id);
-        }
-
-        if (!result?.result || result.result.length === 0) {
-          throw new Error("No readable text found on the page");
-        }
-
-        // Disable the button during conversion
-        const originalButtonText = convertPageButton.textContent;
-        const originalButtonIcon = '<i class="fa-solid fa-book-open-reader"></i>';
-        const spinningIconHtml = 'Working <i class="fas fa-spinner fa-spin"></i> ';
-        convertPageButton.disabled = true;
-        convertPageButton.innerHTML = spinningIconHtml;
-        convertPageButton.style.cursor = 'wait';
-
-        // Process the text chunks
-        await handleWebPageConversion(result.result, result.result.length);
-        hideUrlInputGroup(); // Hide URL input group after successful conversion
-
-        // Clear the URL input after successful conversion
-        if (urlInput) {
-          urlInput.value = "";
-        }
-
-        // Re-enable the button after conversion
-        convertPageButton.disabled = false;
-        convertPageButton.innerHTML = ' Read Page' + originalButtonIcon;
-        convertPageButton.style.cursor = 'pointer';
-      } catch (error) {
-        // Show the URL input field after error if it was previously hidden
-
-
-        if (urlInput && urlInput.hidden) {
-          urlInput.hidden = false;
-          if (urlInputGroup) {
-            urlInputGroup.style.display = "flex";
-          }
-        } else {
-          console.error("Error converting page:", error);
-          showMessage(`Error: ${
-            error.message || "Failed to convert page"
-          }. Please try again.`);
-        }
-
-        // Re-enable the button after error
-        if (convertPageButton) {
-          const originalButtonIcon = '<i class="fa-solid fa-book-open-reader"></i>';
-          convertPageButton.disabled = false;
-          convertPageButton.innerHTML = originalButtonIcon + ' Read Page';
-          convertPageButton.style.cursor = 'pointer';
-        }
-      }
-    });
-  }
-
-  // Open floating window
-  if (openInFloatingWindow) {
-    openInFloatingWindow.addEventListener("click", async () => {
-      // Send message to background script to create floating window
-      await chrome.runtime.sendMessage({
-        action: "createFloatingWindow",
-        selectedText: "", // No text selected when opening from icon
-      });
-      // Close the popup
-      window.close();
-    });
-  }
-
-    // Open floating window
-    if (openInApp) {
-      openInApp.addEventListener("click", async () => {
-        // Open the desired URL in a new tab
-        await chrome.tabs.create({ url: "https://tts.cloud.atemkeng.de/" });
-        // Close the popup window
-        window.close();
-      });
-    }
-
-  // Handle messages from background script
-  const messageListener = async (message, sender, sendResponse) => {
-    try {
-      if (!chrome.runtime?.id) {
-        throw new Error("Extension context invalid");
-      }
-
-      if (
-        isFloatingWindow &&
-        message.action === "newTextSelected" &&
-        message.text &&
-        textInput
-      ) {
-        textInput.value = message.text;
-        if (convertButton) {
-          convertButton.disabled = false;
-        }
-        console.log("Original text:", message.text);
-
-        try {
-          // Chunk the text while preserving formatting
-          const chunks = chunkText(message.text);
-          console.log("Processing chunks:", chunks.length);
-
-          // Process each chunk
-          for (let i = 0; i < chunks.length; i++) {
-            updateChunkDisplay(i + 1, chunks.length);
-            await convertTextToSpeech(chunks[i]);
-          }
-
-          // Reset chunk display
-          updateChunkDisplay(0, 0);
-        } catch (error) {
-          console.error("Error processing chunks:", error);
-          if (convertButton) {
-            convertButton.textContent = `Error: ${error.message}`;
-            setTimeout(() => {
-              convertButton.disabled = false;
-              convertButton.textContent = "Convert to Speech";
-            }, 2000);
-          }
-        }
-      }
-      // Send response to prevent "The message port closed before a response was received" warning
-      sendResponse({ success: true });
-    } catch (error) {
-      console.error("Error in message listener:", error);
-      sendResponse({ success: false, error: error.message });
-    }
-    // Return true to indicate we'll send a response asynchronously
-    return true;
-  };
-
-  // Remove existing message listener before adding a new one
-  if (chrome.runtime?.onMessage?.hasListener(messageListener)) {
-    chrome.runtime.onMessage.removeListener(messageListener);
-  }
-
-  // Add message listener
-  chrome.runtime.onMessage.addListener(messageListener);
-
-  // Initialize sync status component
-  const syncStatus = document.querySelector('sync-status');
-  if (syncStatus) {
-    // Listen for sync status changes
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.type === 'syncStatusUpdate') {
-        syncStatus.setAttribute('status', message.status);
-        if (message.error) {
-          syncStatus.setAttribute('error', message.error);
-        } else {
-          syncStatus.removeAttribute('error');
-        }
-      }
-    });
-
-    // Request initial sync status
-    chrome.runtime.sendMessage({ type: 'getSyncStatus' }, (response) => {
-      if (response) {
-        syncStatus.setAttribute('status', response.status);
-        if (response.error) {
-          syncStatus.setAttribute('error', response.error);
-        }
-      }
-    });
-  }
-
-  // Clean up on window unload
-  window.addEventListener("unload", () => {
-    // Remove event listeners
+  try {
+    // Check if this is a floating window
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFloatingWindow = urlParams.get("floating") === "true";
+
+    // Initialize UI elements first
+    initializeUIElements();
+
+    // Initialize settings
+    await initializeSettings();
+    const currentSettings = await Storage.getSettings();
+
+    // Initialize features
+    await initializeDarkMode();
+    await updateLanguageDisplay(currentSettings.model);
+    await initializeTextInputToggle();
+
+    let saveTimeout;
+    
     if (modelSelect) {
-      modelSelect.removeEventListener("change", populateVoices);
+      modelSelect.addEventListener("change", async (e) => {
+        const model = e.target.value;
+        await updateVoiceOptions(model);
+      });
     }
-    if (closeButton) {
-      closeButton.removeEventListener("click", window.close);
+
+    if (voiceSelect) {
+      voiceSelect.addEventListener("change", async () => {
+        const settings = await Storage.getSettings();
+        settings.voice = voiceSelect.value;
+        
+        // Update display immediately
+        await updateLanguageDisplay(settings.model);
+        
+        // Debounce settings save
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(async () => {
+          await Storage.saveSettings(settings);
+        }, 500);
+      });
     }
-    chrome.runtime.onMessage.removeListener(messageListener);
 
-    // Clean up audio resources
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio = null;
+    // Add event listener for settings button
+    const settingsButton = document.getElementById("settingsButton");
+    if (settingsButton) {
+      settingsButton.addEventListener("click", () => {
+        // Show settings modal
+        const settingsModal = document.getElementById("settingsModal");
+        if (settingsModal) {
+          settingsModal.style.display = "block";
+        }
+      });
     }
-    audioQueue = [];
-    isProcessingQueue = false;
-  });
 
-  // Update language options first
-  updateLanguageOptions();
+    // Add event listener for closing settings modal
+    const closeSettingsButton = document.getElementById("closeSettings");
+    if (closeSettingsButton) {
+      closeSettingsButton.addEventListener("click", () => {
+        const settingsModal = document.getElementById("settingsModal");
+        if (settingsModal) {
+          settingsModal.style.display = "none";
+        }
+      });
+    }
 
-  // Then initialize settings
-  await initializeSettings();
-  const settings = await loadSettings();
-  updateLanguageDisplay(settings.model);
+    // Close modal when clicking outside
+    window.addEventListener("click", (event) => {
+      const settingsModal = document.getElementById("settingsModal");
+      if (event.target === settingsModal) {
+        settingsModal.style.display = "none";
+      }
+    });
+
+    // Initialize other event listeners and UI components
+    // ... rest of the initialization code ...
+  } catch (error) {
+    console.error("Error during initialization:", error);
+  }
 });
 
-Storage.onSettingsChanged((settings) => {
-  // Update UI when settings change from other contexts
-  if (settings.darkMode !== document.body.classList.contains("dark-mode")) {
-    document.body.classList.toggle("dark-mode");
-  }
-  
-  const voiceSelect = document.getElementById("voiceSelect");
-  const modelSelect = document.getElementById("modelSelect");
-  
-  if (modelSelect && settings.model !== modelSelect.value) {
-    modelSelect.value = settings.model;
-    updateVoiceOptions(settings.model);
-  }
-  
-  if (voiceSelect && settings.voice !== voiceSelect.value) {
-    voiceSelect.value = settings.voice;
-  }
-});
-
+// Function to hide URL input group
 function hideUrlInputGroup() {
   const urlInput = document.getElementById("pageUrlInput");
   const urlInputGroup = document.querySelector(".url-input-group");

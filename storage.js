@@ -1,43 +1,18 @@
-import { defaultSettings } from './utils/settings.js';
+// Import required modules
 import { validateSettings, validateQueueItem } from './utils/validation.js';
+import { defaultSettings } from './utils/settings.js';
 import { retry } from './utils/retry.js';
 
+// Storage manager class
 class StorageManager {
   constructor() {
-    this.syncStatus = 'synced';
-    this.syncError = null;
-    this.syncInterval = null;
-    this.SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
-    this.settingsChangeListeners = new Set();
-    
-    // Listen for storage changes
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'sync' && changes.settings) {
-        this.notifySettingsChanged(changes.settings.newValue);
-      }
-    });
-  }
-
-  onSettingsChanged(callback) {
-    this.settingsChangeListeners.add(callback);
-    // Return cleanup function
-    return () => this.settingsChangeListeners.delete(callback);
-  }
-
-  notifySettingsChanged(settings) {
-    this.settingsChangeListeners.forEach(listener => {
-      try {
-        listener(settings);
-      } catch (error) {
-        console.error('Error in settings change listener:', error);
-      }
-    });
+    this.listeners = new Set();
   }
 
   async getSettings() {
     try {
-      const result = await chrome.storage.sync.get('settings');
-      return result.settings || defaultSettings;
+      const data = await chrome.storage.sync.get('settings');
+      return data.settings || defaultSettings;
     } catch (error) {
       console.error('Error getting settings:', error);
       return defaultSettings;
@@ -46,23 +21,28 @@ class StorageManager {
 
   async saveSettings(settings) {
     try {
-      const validatedSettings = validateSettings(settings);
-      await chrome.storage.sync.set({ settings: validatedSettings });
-      this.notifySettingsChanged(validatedSettings);
-      this.notifySyncStatusChange('syncing');
-      await this.sync();
-      return true;
+      // Validate settings
+      validateSettings(settings);
+      
+      // Save settings
+      console.log("Saving settings:", settings);
+      await chrome.storage.sync.set({ settings });
+      console.log("Settings saved successfully");
+      
+      // Notify listeners
+      this.notifyListeners('settings', settings);
+      
+      return settings;
     } catch (error) {
       console.error('Error saving settings:', error);
-      this.notifySyncStatusChange('error', error.message);
-      return false;
+      throw error;
     }
   }
 
   async getQueue() {
     try {
-      const result = await chrome.storage.sync.get('queue');
-      return result.queue || [];
+      const data = await chrome.storage.local.get('queue');
+      return data.queue || [];
     } catch (error) {
       console.error('Error getting queue:', error);
       return [];
@@ -71,112 +51,154 @@ class StorageManager {
 
   async addToQueue(item) {
     try {
+      // Validate queue item
       const validatedItem = validateQueueItem(item);
+      
+      // Get current queue
       const queue = await this.getQueue();
+      
+      // Add item to queue
       queue.push(validatedItem);
-      await chrome.storage.sync.set({ queue });
-      this.notifySyncStatusChange('syncing');
-      await this.sync();
-      return true;
+      
+      // Save updated queue
+      await chrome.storage.local.set({ queue });
+      
+      // Notify listeners
+      this.notifyListeners('queue', queue);
+      
+      return validatedItem;
     } catch (error) {
       console.error('Error adding to queue:', error);
-      this.notifySyncStatusChange('error', error.message);
-      return false;
+      throw error;
     }
   }
 
-  async removeFromQueue(id) {
+  async removeFromQueue(itemId) {
     try {
+      // Get current queue
       const queue = await this.getQueue();
-      const newQueue = queue.filter(item => item.id !== id);
-      await chrome.storage.sync.set({ queue: newQueue });
-      this.notifySyncStatusChange('syncing');
-      await this.sync();
-      return true;
+      
+      // Remove item from queue
+      const newQueue = queue.filter(item => item.id !== itemId);
+      
+      // Save updated queue
+      await chrome.storage.local.set({ queue: newQueue });
+      
+      // Notify listeners
+      this.notifyListeners('queue', newQueue);
+      
+      return newQueue;
     } catch (error) {
       console.error('Error removing from queue:', error);
-      this.notifySyncStatusChange('error', error.message);
-      return false;
+      throw error;
     }
   }
 
-  async sync() {
+  async updateQueueItem(itemId, updates) {
     try {
-      const settings = await this.getSettings();
-      if (!settings.syncEnabled || !settings.pwaUrl) {
-        return;
-      }
-
-      this.notifySyncStatusChange('syncing');
+      // Get current queue
+      const queue = await this.getQueue();
       
-      // Perform sync operation with retry
-      await retry(async () => {
-        const queue = await this.getQueue();
-        const response = await fetch(settings.pwaUrl + '/api/sync', {
+      // Find and update item
+      const newQueue = queue.map(item => {
+        if (item.id === itemId) {
+          const updatedItem = { ...item, ...updates };
+          return validateQueueItem(updatedItem);
+        }
+        return item;
+      });
+      
+      // Save updated queue
+      await chrome.storage.local.set({ queue: newQueue });
+      
+      // Notify listeners
+      this.notifyListeners('queue', newQueue);
+      
+      return newQueue;
+    } catch (error) {
+      console.error('Error updating queue item:', error);
+      throw error;
+    }
+  }
+
+  async clearQueue() {
+    try {
+      // Clear queue
+      await chrome.storage.local.set({ queue: [] });
+      
+      // Notify listeners
+      this.notifyListeners('queue', []);
+      
+      return [];
+    } catch (error) {
+      console.error('Error clearing queue:', error);
+      throw error;
+    }
+  }
+
+  async syncWithPWA() {
+    const settings = await this.getSettings();
+    if (!settings.syncEnabled || !settings.pwaUrl) {
+      throw new Error('Sync is not enabled or PWA URL is not set');
+    }
+
+    try {
+      const response = await retry(async () => {
+        const result = await fetch(settings.pwaUrl + '/api/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            settings,
-            queue,
-            timestamp: Date.now(),
-          }),
+            queue: await this.getQueue(),
+            settings: settings
+          })
         });
 
-        if (!response.ok) {
-          throw new Error('Sync failed: ' + response.statusText);
+        if (!result.ok) {
+          throw new Error(`Sync failed: ${result.statusText}`);
         }
 
-        const result = await response.json();
-        await this.handleSyncResponse(result);
+        return await result.json();
       });
 
-      this.notifySyncStatusChange('synced');
+      // Update local data with server response
+      await this.saveSettings(response.settings);
+      await chrome.storage.local.set({ queue: response.queue });
+
+      return response;
     } catch (error) {
-      console.error('Sync error:', error);
-      this.notifySyncStatusChange('error', error.message);
+      console.error('Sync failed:', error);
       throw error;
     }
   }
 
-  async handleSyncResponse(response) {
-    try {
-      if (response.settings) {
-        await this.saveSettings(response.settings);
-      }
-      if (response.queue) {
-        await chrome.storage.sync.set({ queue: response.queue });
-      }
-    } catch (error) {
-      console.error('Error handling sync response:', error);
-      throw error;
-    }
+  addListener(callback) {
+    this.listeners.add(callback);
   }
 
-  notifySyncStatusChange(status, error = null) {
-    this.syncStatus = status;
-    this.syncError = error;
-    chrome.runtime.sendMessage({
-      type: 'syncStatusUpdate',
-      status,
-      error,
+  removeListener(callback) {
+    this.listeners.delete(callback);
+  }
+
+  notifyListeners(type, data) {
+    this.listeners.forEach(callback => {
+      try {
+        callback(type, data);
+      } catch (error) {
+        console.error('Error in storage listener:', error);
+      }
     });
-  }
-
-  startPeriodicSync() {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
-    this.syncInterval = setInterval(() => this.sync(), this.SYNC_INTERVAL);
-  }
-
-  stopPeriodicSync() {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-      this.syncInterval = null;
-    }
   }
 }
 
-export const Storage = new StorageManager();
+// Create singleton instance
+const storageInstance = new StorageManager();
+
+// For ES modules
+export const Storage = storageInstance;
+
+// For service workers
+if (typeof self !== 'undefined') {
+  self.Storage = storageInstance;
+}

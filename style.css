@@ -772,21 +772,17 @@ select {
   color: #f3f4f6;
 }
 
-
 .language-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #999;
-  border-radius: 4px;
-  background: var(--hover-bg);
   font-size: 12px;
-  font-weight: 500;
-  /* padding: 4px 8px; */
-  /* position: absolute; */
-  /* top: 30px; */
-  /* left: 6%; */
+  color: #666;
+  min-width: 80px;
+  display: inline-block;
+  text-align: center;
+  padding: 4px;
+}
 
+.dark-mode .language-display {
+  color: #aaa;
 }
 
 /* Refresh button styling */

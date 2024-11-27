@@ -1,5 +1,5 @@
 // Default settings for the application
-export const defaultSettings = {
+const defaultSettings = {
   voice: "amy",
   model: "voice-en-us-amy-low",
   darkMode: false,
@@ -7,3 +7,11 @@ export const defaultSettings = {
   syncEnabled: true,
   pwaUrl: ""
 };
+
+// For ES modules
+export { defaultSettings };
+
+// For service workers
+if (typeof self !== 'undefined') {
+  self.Settings = { defaultSettings };
+}

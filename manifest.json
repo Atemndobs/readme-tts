@@ -7,14 +7,34 @@
     "storage",
     "contextMenus",
     "tabs",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "https://voice.cloud.atemkeng.de/*"
   ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["highlight.css", "mini-player.css"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon/icons8-voice-recognition-48.png",
+      "96": "icon/icons8-voice-recognition-96.png",
+      "128": "icon/icons8-voice-recognition-128.png"
+    }
+  },
+  "icons": {
+    "48": "icon/icons8-voice-recognition-48.png",
+    "96": "icon/icons8-voice-recognition-96.png",
+    "128": "icon/icons8-voice-recognition-128.png"
   },
   "web_accessible_resources": [{
     "resources": [
@@ -22,36 +42,15 @@
       "popup.js",
       "content.js",
       "background.js",
-      "highlight.css",
-      "mini-player.css",
-      "icon/*"
+      "storage.js",
+      "sync-worker.js",
+      "utils/settings.js",
+      "utils/validation.js",
+      "utils/retry.js"
     ],
-    "matches": ["<all_urls>"],
-    "extension_ids": ["*"]
+    "matches": ["<all_urls>"]
   }],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://voice.cloud.atemkeng.de/;"
-  },
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon/icons8-voice-recognition-96.png",
-      "48": "icon/icons8-voice-recognition-48.png",
-      "128": "icon/icons8-voice-recognition-128.png"
-    }
-  },
-  "icons": {
-    "16": "icon/icons8-voice-recognition-96.png",
-    "48": "icon/icons8-voice-recognition-48.png",
-    "128": "icon/icons8-voice-recognition-128.png"
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "css": ["highlight.css", "mini-player.css"],
-      "js": ["content.js"],
-      "run_at": "document_end",
-      "all_frames": false
-    }
-  ]
+  }
 }
