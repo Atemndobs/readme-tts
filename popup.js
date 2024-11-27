@@ -28,6 +28,7 @@ let selectionStatus;
 let urlInput;
 let convertPageButton;
 let openInFloatingWindow;
+let openInApp;
 let refreshButton;
 
 // Model to voices mapping
@@ -935,6 +936,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   urlInput = document.getElementById("pageUrlInput");
   convertPageButton = document.getElementById("convertPageButton");
   openInFloatingWindow = document.getElementById("openInFloatingWindow");
+  openInApp = document.getElementById("openInApp");
   refreshButton = document.getElementById("refreshButton");
 
   // Initialize player controls
@@ -1421,6 +1423,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       window.close();
     });
   }
+
+    // Open floating window
+    if (openInApp) {
+      openInApp.addEventListener("click", async () => {
+        // Open the desired URL in a new tab
+        await chrome.tabs.create({ url: "https://tts.cloud.atemkeng.de/" });
+        // Close the popup window
+        window.close();
+      });
+    }
 
   // Handle messages from background script
   const messageListener = async (message, sender, sendResponse) => {
