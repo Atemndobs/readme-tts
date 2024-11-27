@@ -629,6 +629,18 @@ audio {
   gap: 8px;
 }
 
+/* Sync status styles */
+sync-status {
+    margin-left: 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+}
+
+.dark-mode sync-status {
+    color: #aaa;
+}
+
 /* Highlight styles */
 .tts-highlight {
     background-color: #ffd700;
